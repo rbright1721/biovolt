@@ -58,6 +58,13 @@ class CoherenceUpdated extends SensorsEvent {
   List<Object?> get props => [value];
 }
 
+class ConnectionUpdated extends SensorsEvent {
+  final bool connected;
+  ConnectionUpdated(this.connected);
+  @override
+  List<Object?> get props => [connected];
+}
+
 class HrvSourceUpdated extends SensorsEvent {
   final HrvSource source;
   HrvSourceUpdated(this.source);

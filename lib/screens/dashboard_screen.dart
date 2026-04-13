@@ -440,9 +440,12 @@ class _SecondaryMetricCardState extends State<_SecondaryMetricCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  widget.label.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall,
+                Flexible(
+                  child: Text(
+                    widget.label.toUpperCase(),
+                    style: Theme.of(context).textTheme.labelSmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 if (widget.signalInfo != null) ...[
                   const SizedBox(width: 4),

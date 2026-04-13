@@ -27,6 +27,8 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
         emit(state.copyWith(lfHfRatio: e.value)));
     on<CoherenceUpdated>((e, emit) =>
         emit(state.copyWith(coherence: e.value)));
+    on<ConnectionUpdated>((e, emit) =>
+        emit(state.copyWith(isConnected: e.connected)));
     on<HrvSourceUpdated>((e, emit) =>
         emit(state.copyWith(hrvSource: e.source)));
   }
@@ -42,9 +44,10 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
       _bleService.spo2Stream.listen((v) => add(Spo2Updated(v))),
       _bleService.lfHfStream.listen((v) => add(LfHfUpdated(v))),
       _bleService.coherenceStream.listen((v) => add(CoherenceUpdated(v))),
-      _bleService.connectionStream.listen((connected) =>
-          emit(state.copyWith(isConnected: connected))),
+      _bleService.connectionStream.listen((v) => add(ConnectionUpdated(v))),
     ]);
+
+    add(HrvSourceUpdated(HrvSource.ppg));
   }
 
   void _onStopped(SensorsStopped event, Emitter<SensorsState> emit) {

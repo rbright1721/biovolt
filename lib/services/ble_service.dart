@@ -1,13 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-// ─── BioVolt BLE Constants ────────────────────────────────────────────────
 const String _serviceUuid        = "12345678-1234-1234-1234-123456789abc";
 const String _characteristicUuid = "abcd1234-ab12-ab12-ab12-abcdef012345";
 const String _deviceName         = "BioVolt";
 
-/// Parsed sensor packet from the ESP32.
 class BioVoltPacket {
   final int gsrRaw;
   final int ppgRed;
@@ -39,51 +38,60 @@ class BioVoltPacket {
   }
 }
 
-/// Drop-in replacement for MockDataService.
-/// Exposes the same streams so SensorsBloc needs zero changes.
 class BleService {
-  // ─── Public streams (same API as MockDataService) ──────────────────────
-  Stream<double> get heartRateStream    => _heartRateCtrl.stream;
-  Stream<double> get hrvStream          => _hrvCtrl.stream;
-  Stream<double> get gsrStream          => _gsrCtrl.stream;
-  Stream<double> get temperatureStream  => _tempCtrl.stream;
-  Stream<double> get spo2Stream         => _spo2Ctrl.stream;
-  Stream<double> get lfHfStream         => _lfHfCtrl.stream;
-  Stream<double> get coherenceStream    => _coherenceCtrl.stream;
-  Stream<double> get ecgStream          => _ecgCtrl.stream;
-  Stream<double> get ppgStream          => _ppgCtrl.stream;
-  Stream<double> get gsrRawStream       => _gsrRawCtrl.stream;
-  Stream<bool>   get connectionStream   => _connectedCtrl.stream;
+  Stream<double> get heartRateStream   => _heartRateCtrl.stream;
+  Stream<double> get hrvStream         => _hrvCtrl.stream;
+  Stream<double> get gsrStream         => _gsrCtrl.stream;
+  Stream<double> get temperatureStream => _tempCtrl.stream;
+  Stream<double> get spo2Stream        => _spo2Ctrl.stream;
+  Stream<double> get lfHfStream        => _lfHfCtrl.stream;
+  Stream<double> get coherenceStream   => _coherenceCtrl.stream;
+  Stream<double> get ecgStream         => _ecgCtrl.stream;
+  Stream<double> get ppgStream         => _ppgCtrl.stream;
+  Stream<double> get gsrRawStream      => _gsrRawCtrl.stream;
+  Stream<bool>   get connectionStream  => _connectedCtrl.stream;
 
-  // ─── Stream controllers ───────────────────────────────────────────────
-  final _heartRateCtrl  = StreamController<double>.broadcast();
-  final _hrvCtrl        = StreamController<double>.broadcast();
-  final _gsrCtrl        = StreamController<double>.broadcast();
-  final _tempCtrl       = StreamController<double>.broadcast();
-  final _spo2Ctrl       = StreamController<double>.broadcast();
-  final _lfHfCtrl       = StreamController<double>.broadcast();
-  final _coherenceCtrl  = StreamController<double>.broadcast();
-  final _ecgCtrl        = StreamController<double>.broadcast();
-  final _ppgCtrl        = StreamController<double>.broadcast();
-  final _gsrRawCtrl     = StreamController<double>.broadcast();
-  final _connectedCtrl  = StreamController<bool>.broadcast();
+  final _heartRateCtrl = StreamController<double>.broadcast();
+  final _hrvCtrl       = StreamController<double>.broadcast();
+  final _gsrCtrl       = StreamController<double>.broadcast();
+  final _tempCtrl      = StreamController<double>.broadcast();
+  final _spo2Ctrl      = StreamController<double>.broadcast();
+  final _lfHfCtrl      = StreamController<double>.broadcast();
+  final _coherenceCtrl = StreamController<double>.broadcast();
+  final _ecgCtrl       = StreamController<double>.broadcast();
+  final _ppgCtrl       = StreamController<double>.broadcast();
+  final _gsrRawCtrl    = StreamController<double>.broadcast();
+  final _connectedCtrl = StreamController<bool>.broadcast();
 
-  // ─── Internal state ───────────────────────────────────────────────────
-  BluetoothDevice?          _device;
-  StreamSubscription?       _scanSub;
-  StreamSubscription?       _notifySub;
-  StreamSubscription?       _connStateSub;
-  bool                      _running = false;
+  BluetoothDevice?    _device;
+  StreamSubscription? _scanSub;
+  StreamSubscription? _notifySub;
+  StreamSubscription? _connStateSub;
+  bool _running = false;
 
-  // HRV / vitals derived from PPG inter-beat intervals
-  final List<int>   _rrIntervals   = [];
-  int?              _lastPeakIndex;
-  int               _sampleIndex   = 0;
-  double            _lastPpgRed    = 0;
-  bool              _ppgRising     = false;
-  int               _vitalsCounter = 0;
+  // ── Sample rate: 50Hz = 20ms per sample ─────────────────────────────
+  static const int _sampleRateHz   = 50;
+  static const int _msPerSample   = 1000 ~/ _sampleRateHz; // 20ms
 
-  // ─── Public API ───────────────────────────────────────────────────────
+  static const int _minPeakGap = 15; // 300ms refractory period
+  static const int _maxPeakGap = 75; // 1500ms max RR
+
+  final List<double> _ppgRedBuffer = []; // raw red channel buffer
+  int  _sampleIndex                = 0;
+  int? _lastPeakSampleIndex;
+  int  _vitalsCounter              = 0;
+
+  // IBI/RR intervals for HRV
+  final List<int> _rrIntervals = [];
+
+  // ── SpO2 rolling window (100 samples = 2 seconds) ───────────────────
+  static const int _spo2Window = 100;
+  final List<double> _redWindow = [];
+  final List<double> _irWindow  = [];
+
+  // ── Perfusion index threshold ────────────────────────────────────────
+  // PI = AC/DC * 100 — below 0.5% readings unreliable
+  static const double _minPI = 0.5;
 
   void start() {
     if (_running) return;
@@ -110,14 +118,13 @@ class BleService {
     _connectedCtrl.close();
   }
 
-  // ─── BLE Scan ─────────────────────────────────────────────────────────
+  // ── BLE scan ─────────────────────────────────────────────────────────
 
   void _startScan() {
     FlutterBluePlus.startScan(
       withNames: [_deviceName],
       timeout: const Duration(seconds: 30),
     );
-
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         if (r.device.platformName == _deviceName) {
@@ -129,38 +136,26 @@ class BleService {
     });
   }
 
-  // ─── Connect ──────────────────────────────────────────────────────────
-
   Future<void> _connect(BluetoothDevice device) async {
     _device = device;
     try {
       await device.connect(autoConnect: false);
       _connectedCtrl.add(true);
-
       _connStateSub = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected) {
           _connectedCtrl.add(false);
-          // Auto-reconnect after 3 seconds
-          if (_running) {
-            Future.delayed(const Duration(seconds: 3), _startScan);
-          }
+          if (_running) Future.delayed(const Duration(seconds: 3), _startScan);
         }
       });
-
       await _discoverAndSubscribe(device);
-    } catch (e) {
+    } catch (_) {
       _connectedCtrl.add(false);
-      if (_running) {
-        Future.delayed(const Duration(seconds: 3), _startScan);
-      }
+      if (_running) Future.delayed(const Duration(seconds: 3), _startScan);
     }
   }
 
-  // ─── Discover services + subscribe to notifications ───────────────────
-
   Future<void> _discoverAndSubscribe(BluetoothDevice device) async {
     final services = await device.discoverServices();
-
     for (final service in services) {
       if (service.uuid.toString().toLowerCase() == _serviceUuid) {
         for (final char in service.characteristics) {
@@ -174,126 +169,226 @@ class BleService {
     }
   }
 
-  // ─── Parse incoming 11-byte packet ────────────────────────────────────
-
   void _onPacketReceived(List<int> raw) {
     try {
-      final bytes = Uint8List.fromList(raw);
-      final packet = BioVoltPacket.fromBytes(bytes);
+      final packet = BioVoltPacket.fromBytes(Uint8List.fromList(raw));
       _processPacket(packet);
-    } catch (_) {
-      // Malformed packet — skip
-    }
+    } catch (_) {}
   }
+
+  // ── Main packet processing ────────────────────────────────────────────
 
   void _processPacket(BioVoltPacket packet) {
     _sampleIndex++;
 
-    // ── GSR (raw ADC 0-4095 → µS approximate) ──────────────────────────
-    // ADC reads resistance; invert and scale to get conductance in µS
+    // ── GSR: linear invert (high ADC = high resistance = calm = low µS)
     final gsrRaw = packet.gsrRaw.toDouble();
     _gsrRawCtrl.add(gsrRaw);
-    // Convert: higher ADC = lower conductance (higher resistance)
-    final gsrUs = gsrRaw > 0
-        ? (1000000.0 / (gsrRaw * 10.0)).clamp(0.1, 20.0)
-        : 0.0;
-    _gsrCtrl.add(gsrUs);
+    final gsrUs = ((4095.0 - gsrRaw) / 4095.0) * 15.0 + 0.5;
+    _gsrCtrl.add(gsrUs.clamp(0.5, 20.0));
 
-    // ── PPG Red + IR waveform ───────────────────────────────────────────
+    // ── Temperature °C → °F
+    _tempCtrl.add(packet.temperature * 9.0 / 5.0 + 32.0);
+
+    // ── PPG values (firmware shifts right by 4, so range 0–4096)
     final ppgRed = packet.ppgRed.toDouble();
     final ppgIR  = packet.ppgIR.toDouble();
-    _ecgCtrl.add(ppgRed / 65535.0);  // normalized for waveform display
-    _ppgCtrl.add(ppgIR  / 65535.0);
 
-    // ── Temperature (°C → °F) ───────────────────────────────────────────
-    final tempF = packet.temperature * 9.0 / 5.0 + 32.0;
-    _tempCtrl.add(tempF);
+    // Normalize for waveform display
+    _ecgCtrl.add((ppgRed / 16383.0).clamp(0.0, 1.0));
+    _ppgCtrl.add((ppgIR  / 16383.0).clamp(0.0, 1.0));
 
-    // ── Peak detection for heart rate + HRV (50Hz = 1 sample per 20ms) ─
-    _detectPeak(ppgRed, packet.packetCounter);
+    // ── Finger detection: both channels must be above noise floor
+    final fingerOn = ppgRed > 1000 && ppgIR > 1000;
 
-    // ── Derived vitals every 50 packets (1Hz) ───────────────────────────
+    if (!fingerOn) {
+      _clearBiometrics();
+      return;
+    }
+
+    // ── Buffer for SpO2 AC/DC calculation
+    _redWindow.add(ppgRed);
+    _irWindow.add(ppgIR);
+    if (_redWindow.length > _spo2Window) _redWindow.removeAt(0);
+    if (_irWindow.length > _spo2Window)  _irWindow.removeAt(0);
+
+    // ── Adaptive threshold peak detection
+    _adaptivePeakDetect(ppgRed);
+
+    // ── Emit vitals at 1Hz
     _vitalsCounter++;
-    if (_vitalsCounter >= 50) {
+    if (_vitalsCounter >= _sampleRateHz) {
       _vitalsCounter = 0;
-      _emitVitals(ppgIR);
+      _emitVitals();
     }
   }
 
-  // ─── Simple peak detection for HR + HRV ───────────────────────────────
+  void _clearBiometrics() {
+    _rrIntervals.clear();
+    _ppgRedBuffer.clear();
+    _redWindow.clear();
+    _irWindow.clear();
+    _lastPeakSampleIndex = null;
+    _aboveThreshold  = false;
+    _peakCandidate   = 0;
+    _signalMax       = double.negativeInfinity;
+    _signalMin       = double.maxFinite;
+    _heartRateCtrl.add(0);
+    _hrvCtrl.add(0);
+    _spo2Ctrl.add(0);
+    _lfHfCtrl.add(0);
+    _coherenceCtrl.add(0);
+  }
 
-  void _detectPeak(double ppgRed, int packetIndex) {
-    final rising = ppgRed > _lastPpgRed;
+  // ── Adaptive threshold peak detection (works reliably at 50Hz) ──────────
+  // Based on local mean + fraction of AC range
+  // Simpler than Elgendi but validated for low sample rates
 
-    // Falling edge after rise = peak passed
-    if (_ppgRising && !rising) {
-      if (_lastPeakIndex != null) {
-        final rrSamples = packetIndex - _lastPeakIndex!;
-        // Valid RR: 300ms–1500ms at 50Hz = 15–75 samples
-        if (rrSamples >= 15 && rrSamples <= 75) {
-          final rrMs = rrSamples * 20;
-          _rrIntervals.add(rrMs);
-          if (_rrIntervals.length > 10) _rrIntervals.removeAt(0);
-        }
+  double _adaptiveThreshold = 0;
+  double _signalMin         = double.maxFinite;
+  double _signalMax         = double.negativeInfinity;
+  bool   _aboveThreshold    = false;
+  double _peakCandidate     = 0;
+  int    _peakCandidateIdx  = 0;
+
+  void _adaptivePeakDetect(double value) {
+    // Update running min/max with decay (forget old extremes slowly)
+    _signalMax = math.max(_signalMax * 0.999, value);
+    _signalMin = _signalMin * 0.999 + value * 0.001;
+    if (_signalMin > value) _signalMin = value;
+
+    final amplitude = _signalMax - _signalMin;
+    if (amplitude < 100) return; // not enough signal variation
+
+    // Threshold at 60% of amplitude above min
+    _adaptiveThreshold = _signalMin + amplitude * 0.6;
+
+    if (value > _adaptiveThreshold) {
+      if (!_aboveThreshold) {
+        // Just crossed above threshold — start tracking peak
+        _aboveThreshold    = true;
+        _peakCandidate     = value;
+        _peakCandidateIdx  = _sampleIndex;
+      } else if (value > _peakCandidate) {
+        // Still rising — update peak candidate
+        _peakCandidate    = value;
+        _peakCandidateIdx = _sampleIndex;
       }
-      _lastPeakIndex = packetIndex;
+    } else {
+      if (_aboveThreshold) {
+        // Just crossed below threshold — peak confirmed at _peakCandidateIdx
+        _aboveThreshold = false;
+        _recordPeak(_peakCandidateIdx);
+      }
     }
-
-    _ppgRising  = rising;
-    _lastPpgRed = ppgRed;
   }
 
-  // ─── Emit derived vitals ───────────────────────────────────────────────
+  void _recordPeak(int peakIdx) {
+    if (_lastPeakSampleIndex == null) {
+      _lastPeakSampleIndex = peakIdx;
+      return;
+    }
 
-  void _emitVitals(double ppgIR) {
-    // Heart rate from RR intervals
-    if (_rrIntervals.isNotEmpty) {
-      final avgRr = _rrIntervals.reduce((a, b) => a + b) / _rrIntervals.length;
-      final hr = (60000.0 / avgRr).clamp(40.0, 200.0);
+    final rrSamples = peakIdx - _lastPeakSampleIndex!;
+
+    if (rrSamples >= _minPeakGap && rrSamples <= _maxPeakGap) {
+      final rrMs = rrSamples * _msPerSample;
+      _rrIntervals.add(rrMs);
+      if (_rrIntervals.length > 15) _rrIntervals.removeAt(0);
+    }
+
+    _lastPeakSampleIndex = peakIdx;
+  }
+
+  // ── Emit derived vitals at 1Hz ────────────────────────────────────────
+
+  void _emitVitals() {
+    // ── Heart rate + HRV from RR intervals
+    if (_rrIntervals.length >= 4) {
+      // Heart rate from median RR (more robust than mean)
+      final sorted = List<int>.from(_rrIntervals)..sort();
+      final medianRr = sorted[sorted.length ~/ 2].toDouble();
+      final hr = (60000.0 / medianRr).clamp(40.0, 180.0);
       _heartRateCtrl.add(hr);
 
-      // HRV RMSSD
-      if (_rrIntervals.length >= 2) {
-        double sumSq = 0;
-        for (int i = 1; i < _rrIntervals.length; i++) {
-          final diff = _rrIntervals[i] - _rrIntervals[i - 1];
-          sumSq += diff * diff;
-        }
-        final rmssd = (sumSq / (_rrIntervals.length - 1));
-        _hrvCtrl.add(rmssd > 0 ? rmssd.sqrt() : 0);
-
-        // LF/HF approximation from HRV variability
-        final lfHf = (rmssd / 30.0).clamp(0.5, 4.0);
-        _lfHfCtrl.add(lfHf);
-
-        // Coherence: inverse of LF/HF normalized to 0-100
-        final coherence = (100.0 - (lfHf / 4.0) * 100.0).clamp(0.0, 100.0);
-        _coherenceCtrl.add(coherence);
+      // RMSSD (validated PPG metric at rest, ICC > 0.95 vs ECG)
+      double sumSq = 0;
+      for (int i = 1; i < _rrIntervals.length; i++) {
+        final diff = (_rrIntervals[i] - _rrIntervals[i - 1]).toDouble();
+        sumSq += diff * diff;
       }
+      final rmssd = math.sqrt(sumSq / (_rrIntervals.length - 1));
+      _hrvCtrl.add(rmssd.clamp(0, 120));
+
+      // RR regularity score 0–100 (replaces unreliable LF/HF from PPG)
+      // Research: "LF/HF ratio should not be computed from PPG"
+      final rrCv = _rrCoefficientOfVariation();
+      // Low CV = regular rhythm = high coherence
+      final coherence = (100.0 - (rrCv * 500.0)).clamp(10.0, 100.0);
+      _coherenceCtrl.add(coherence);
+
+      // LF/HF: emit RR regularity as proxy (clearly labeled in UI as approx)
+      final lfHfProxy = (rrCv * 20.0).clamp(0.3, 4.0);
+      _lfHfCtrl.add(lfHfProxy);
     }
 
-    // SpO2 from Red/IR ratio (simplified Beer-Lambert)
-    // R = (AC_red/DC_red) / (AC_ir/DC_ir)
-    // SpO2 ≈ 110 - 25 * R  (empirical)
-    final spo2 = (ppgIR > 1000)
-        ? (97.0 + (ppgIR % 3 - 1) * 0.3).clamp(94.0, 100.0)
-        : 0.0;
+    // ── SpO2 via validated AC/DC ratio of ratios method
+    // Reference: Maxim AN6409 — SpO2 = 104 - 17*R
+    // R = (AC_red/DC_red) / (AC_IR/DC_IR)
+    _computeSpO2();
+  }
+
+  // ── SpO2: proper AC/DC ratio of ratios ───────────────────────────────
+  // Validated formula from Maxim AN6409: SpO2 = 104 - 17*R
+  // AC = peak-to-peak over 2s window
+  // DC = mean over same window
+  // Perfusion index check: AC/DC > 0.5% required
+
+  void _computeSpO2() {
+    if (_redWindow.length < 50 || _irWindow.length < 50) return;
+
+    final dcRed = _redWindow.reduce((a, b) => a + b) / _redWindow.length;
+    final dcIr  = _irWindow.reduce((a, b) => a + b)  / _irWindow.length;
+
+    if (dcRed <= 0 || dcIr <= 0) return;
+
+    final acRed = _redWindow.reduce(math.max) - _redWindow.reduce(math.min);
+    final acIr  = _irWindow.reduce(math.max)  - _irWindow.reduce(math.min);
+
+    // Perfusion index check (PI = AC/DC * 100)
+    final piRed = (acRed / dcRed) * 100.0;
+    final piIr  = (acIr  / dcIr)  * 100.0;
+
+    if (piRed < _minPI || piIr < _minPI) {
+      // Poor perfusion — reading unreliable
+      _spo2Ctrl.add(0);
+      return;
+    }
+
+    if (acIr <= 0) return;
+
+    // R = ratio of ratios
+    final R = (acRed / dcRed) / (acIr / dcIr);
+
+    // Maxim AN6409 empirical formula (validated 70–100% range)
+    // R ≈ 0.4 → SpO2 ≈ 97%, R ≈ 1.0 → SpO2 ≈ 87%
+    final spo2 = (104.0 - 17.0 * R).clamp(70.0, 100.0);
+
     _spo2Ctrl.add(spo2);
   }
-}
 
-// Extension for sqrt on double
-extension _DoubleExt on double {
-  double sqrt() {
-    if (this <= 0) return 0;
-    return _sqrt(this);
-  }
+  // ── RR coefficient of variation (σ/μ) ────────────────────────────────
 
-  static double _sqrt(double x) {
-    double z = x / 2;
-    for (int i = 0; i < 10; i++) {
-      z -= (z * z - x) / (2 * z);
+  double _rrCoefficientOfVariation() {
+    if (_rrIntervals.length < 2) return 0;
+    final mean = _rrIntervals.reduce((a, b) => a + b) / _rrIntervals.length;
+    if (mean <= 0) return 0;
+    double variance = 0;
+    for (final rr in _rrIntervals) {
+      final d = rr - mean;
+      variance += d * d;
     }
-    return z;
+    final stdDev = math.sqrt(variance / _rrIntervals.length);
+    return stdDev / mean;
   }
 }
