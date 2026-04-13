@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter:*)",
+      "Bash(cp -r biovolt_temp/* biovolt/)",
+      "Bash(cp biovolt_temp/.gitignore biovolt/)",
+      "Bash(cp biovolt_temp/.metadata biovolt/)",
+      "Bash(dart analyze:*)",
+      "Bash(dart run:*)"
+    ]
+  }
+}
