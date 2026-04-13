@@ -10,7 +10,7 @@ import '../bloc/session/session_event.dart';
 import '../models/session.dart';
 import '../widgets/pattern_selector.dart';
 import '../config/theme.dart';
-import '../services/mock_data_service.dart';
+import '../services/ble_service.dart';
 import '../models/signal_info.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/session_type_sheet.dart';
@@ -19,9 +19,9 @@ import '../widgets/signal_info_sheet.dart';
 import 'session_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
-  final MockDataService mockDataService;
+  final BleService bleService;
 
-  const DashboardScreen({super.key, required this.mockDataService});
+  const DashboardScreen({super.key, required this.bleService});
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +86,7 @@ class DashboardScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(
           value: bloc,
-          child: SessionScreen(mockDataService: mockDataService),
+          child: SessionScreen(bleService: bleService),
         ),
       ),
     );
@@ -100,7 +100,7 @@ class DashboardScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(
           value: bloc,
-          child: SessionScreen(mockDataService: mockDataService),
+          child: SessionScreen(bleService: bleService),
         ),
       ),
     );
@@ -123,7 +123,6 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Connection dot
               Container(
                 width: 8,
                 height: 8,
@@ -135,8 +134,8 @@ class DashboardScreen extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: (state.isConnected
-                              ? BioVoltColors.teal
-                              : BioVoltColors.coral)
+                          ? BioVoltColors.teal
+                          : BioVoltColors.coral)
                           .withAlpha(120),
                       blurRadius: 8,
                     ),
@@ -145,15 +144,14 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                state.isConnected ? 'LIVE' : 'OFFLINE',
+                state.isConnected ? 'LIVE' : 'SCANNING...',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: state.isConnected
-                          ? BioVoltColors.teal
-                          : BioVoltColors.coral,
-                    ),
+                  color: state.isConnected
+                      ? BioVoltColors.teal
+                      : BioVoltColors.amber,
+                ),
               ),
               const Spacer(),
-              // Battery indicator
               Icon(
                 Icons.battery_5_bar_rounded,
                 color: BioVoltColors.textSecondary,
@@ -188,7 +186,7 @@ class DashboardScreen extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'ECG',
+                  'PPG',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -198,7 +196,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'LEAD I',
+                  'RED CHANNEL',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     color: BioVoltColors.textSecondary,
@@ -206,7 +204,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'AD8232',
+                  'MAX30102',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9,
                     color: BioVoltColors.textSecondary.withAlpha(120),
@@ -223,12 +221,12 @@ class DashboardScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Expanded(
               child: LiveWaveform(
-                dataStream: mockDataService.ecgStream,
+                dataStream: bleService.ecgStream,
                 lineColor: BioVoltColors.teal,
                 strokeWidth: 2,
                 maxPoints: 300,
-                minY: -0.4,
-                maxY: 1.2,
+                minY: 0,
+                maxY: 1,
               ),
             ),
           ],
@@ -246,11 +244,10 @@ class DashboardScreen extends StatelessWidget {
       mainAxisSpacing: 12,
       childAspectRatio: 1.1,
       children: [
-        // Heart Rate
         SignalCard(
           label: 'Heart Rate',
           unit: 'BPM',
-          valueStream: mockDataService.heartRateStream,
+          valueStream: bleService.heartRateStream,
           accentColor: BioVoltColors.teal,
           showPulse: true,
           formatValue: (v) => v.toStringAsFixed(0),
@@ -263,7 +260,6 @@ class DashboardScreen extends StatelessWidget {
             context, info: SignalInfoRegistry.heartRate, currentValue: v,
           ),
         ),
-        // HRV RMSSD
         BlocBuilder<SensorsBloc, SensorsState>(
           buildWhen: (prev, curr) => prev.hrvSource != curr.hrvSource,
           builder: (context, sensorState) {
@@ -271,7 +267,7 @@ class DashboardScreen extends StatelessWidget {
             return SignalCard(
               label: 'HRV RMSSD',
               unit: 'ms',
-              valueStream: mockDataService.hrvStream,
+              valueStream: bleService.hrvStream,
               accentColor: BioVoltColors.teal,
               formatValue: (v) => v.toStringAsFixed(1),
               getStatus: (v) {
@@ -286,11 +282,10 @@ class DashboardScreen extends StatelessWidget {
             );
           },
         ),
-        // GSR
         SignalCard(
           label: 'GSR',
-          unit: '\u00B5S',
-          valueStream: mockDataService.gsrStream,
+          unit: 'µS',
+          valueStream: bleService.gsrStream,
           accentColor: BioVoltColors.amber,
           formatValue: (v) => v.toStringAsFixed(2),
           getStatus: (v) {
@@ -302,11 +297,10 @@ class DashboardScreen extends StatelessWidget {
             context, info: SignalInfoRegistry.gsr, currentValue: v,
           ),
         ),
-        // Temperature
         SignalCard(
           label: 'Temperature',
-          unit: '\u00B0F',
-          valueStream: mockDataService.temperatureStream,
+          unit: '°F',
+          valueStream: bleService.temperatureStream,
           accentColor: BioVoltColors.coral,
           formatValue: (v) => v.toStringAsFixed(1),
           getStatus: (v) {
@@ -324,36 +318,33 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildSecondaryMetrics(BuildContext context) {
     return Row(
       children: [
-        // SpO2
         Expanded(
           child: _SecondaryMetricCard(
             label: 'SpO2',
             unit: '%',
-            stream: mockDataService.spo2Stream,
+            stream: bleService.spo2Stream,
             color: BioVoltColors.teal,
             format: (v) => v.toStringAsFixed(0),
             signalInfo: SignalInfoRegistry.spo2,
           ),
         ),
         const SizedBox(width: 10),
-        // LF/HF Ratio
         Expanded(
           child: _SecondaryMetricCard(
             label: 'LF/HF',
             unit: 'ratio',
-            stream: mockDataService.lfHfStream,
+            stream: bleService.lfHfStream,
             color: BioVoltColors.amber,
             format: (v) => v.toStringAsFixed(2),
             signalInfo: SignalInfoRegistry.lfHf,
           ),
         ),
         const SizedBox(width: 10),
-        // Coherence
         Expanded(
           child: _SecondaryMetricCard(
             label: 'Coherence',
             unit: 'score',
-            stream: mockDataService.coherenceStream,
+            stream: bleService.coherenceStream,
             color: BioVoltColors.teal,
             format: (v) => v.toStringAsFixed(0),
             signalInfo: SignalInfoRegistry.coherence,
@@ -436,10 +427,10 @@ class _SecondaryMetricCardState extends State<_SecondaryMetricCard> {
     return GestureDetector(
       onTap: widget.signalInfo != null
           ? () => SignalInfoSheet.show(
-                context,
-                info: widget.signalInfo!,
-                currentValue: _value,
-              )
+        context,
+        info: widget.signalInfo!,
+        currentValue: _value,
+      )
           : null,
       child: Container(
         decoration: BioVoltTheme.glassCard(glowColor: widget.color),
@@ -472,9 +463,9 @@ class _SecondaryMetricCardState extends State<_SecondaryMetricCard> {
             Text(
               widget.unit,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: BioVoltColors.textSecondary,
-                    fontSize: 10,
-                  ),
+                color: BioVoltColors.textSecondary,
+                fontSize: 10,
+              ),
             ),
           ],
         ),

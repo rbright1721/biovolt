@@ -10,7 +10,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/session_history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/trends_screen.dart';
-import 'services/mock_data_service.dart';
+import 'services/ble_service.dart';
 import 'services/session_storage.dart';
 
 class BioVoltApp extends StatefulWidget {
@@ -23,17 +23,17 @@ class BioVoltApp extends StatefulWidget {
 }
 
 class _BioVoltAppState extends State<BioVoltApp> {
-  late final MockDataService _mockDataService;
+  late final BleService _bleService;
 
   @override
   void initState() {
     super.initState();
-    _mockDataService = MockDataService();
+    _bleService = BleService();
   }
 
   @override
   void dispose() {
-    _mockDataService.dispose();
+    _bleService.dispose();
     super.dispose();
   }
 
@@ -43,7 +43,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
       providers: [
         BlocProvider(
           create: (_) {
-            final bloc = SensorsBloc(mockService: _mockDataService);
+            final bloc = SensorsBloc(bleService: _bleService);
             bloc.add(SensorsStarted());
             return bloc;
           },
@@ -63,16 +63,16 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
-        home: _MainShell(mockDataService: _mockDataService),
+        home: _MainShell(bleService: _bleService),
       ),
     );
   }
 }
 
 class _MainShell extends StatefulWidget {
-  final MockDataService mockDataService;
+  final BleService bleService;
 
-  const _MainShell({required this.mockDataService});
+  const _MainShell({required this.bleService});
 
   @override
   State<_MainShell> createState() => _MainShellState();
@@ -84,7 +84,7 @@ class _MainShellState extends State<_MainShell> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      DashboardScreen(mockDataService: widget.mockDataService),
+      DashboardScreen(bleService: widget.bleService),
       const SessionHistoryScreen(),
       const TrendsScreen(),
       const SettingsScreen(),

@@ -7,7 +7,7 @@ import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/breathwork_pattern.dart';
 import '../models/session.dart';
-import '../services/mock_data_service.dart';
+import '../services/ble_service.dart';
 import '../widgets/breathing_pacer.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/session_guidance.dart';
@@ -16,9 +16,9 @@ import '../widgets/spo2_safety_monitor.dart';
 import '../widgets/wim_hof_pacer.dart';
 
 class SessionScreen extends StatelessWidget {
-  final MockDataService mockDataService;
+  final BleService bleService;
 
-  const SessionScreen({super.key, required this.mockDataService});
+  const SessionScreen({super.key, required this.bleService});
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +47,7 @@ class SessionScreen extends StatelessWidget {
                   initiallyExpanded: true,
                 ),
                 if (isAlteredState)
-                  Spo2SafetyMonitor(spo2Stream: mockDataService.spo2Stream),
+                  Spo2SafetyMonitor(spo2Stream: bleService.spo2Stream),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -223,7 +223,7 @@ class SessionScreen extends StatelessWidget {
           size: 240,
           totalRounds: 3,
           rapidCycles: 30,
-          spo2Stream: mockDataService.spo2Stream,
+          spo2Stream: bleService.spo2Stream,
         ),
       ],
     );
@@ -277,7 +277,7 @@ class SessionScreen extends StatelessWidget {
 
   Widget _buildColdExposureContent() {
     return _LargeMetricDisplay(
-      stream: mockDataService.temperatureStream,
+      stream: bleService.temperatureStream,
       label: 'BODY TEMPERATURE',
       unit: '\u00B0F',
       color: BioVoltColors.coral,
@@ -287,7 +287,7 @@ class SessionScreen extends StatelessWidget {
 
   Widget _buildMeditationContent() {
     return _LargeMetricDisplay(
-      stream: mockDataService.gsrStream,
+      stream: bleService.gsrStream,
       label: 'SKIN CONDUCTANCE',
       unit: '\u00B5S',
       color: BioVoltColors.amber,
@@ -330,7 +330,7 @@ class SessionScreen extends StatelessWidget {
 
   Widget _buildGroundingContent() {
     return _LargeMetricDisplay(
-      stream: mockDataService.gsrStream,
+      stream: bleService.gsrStream,
       label: 'GSR TRACKING',
       unit: '\u00B5S',
       color: BioVoltColors.amber,
@@ -376,7 +376,7 @@ class SessionScreen extends StatelessWidget {
           const SizedBox(height: 4),
           Expanded(
             child: LiveWaveform(
-              dataStream: mockDataService.ecgStream,
+              dataStream: bleService.ecgStream,
               lineColor: BioVoltColors.teal,
               strokeWidth: 1.5,
               maxPoints: 200,
@@ -394,33 +394,33 @@ class SessionScreen extends StatelessWidget {
 
     final cards = switch (type) {
       SessionType.breathwork => [
-          _focusCard('HRV RMSSD', 'ms', mockDataService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
-          _focusCard('GSR', '\u00B5S', mockDataService.gsrStream,
+          _focusCard('GSR', '\u00B5S', bleService.gsrStream,
               BioVoltColors.amber, (v) => v.toStringAsFixed(2)),
         ],
       SessionType.coldExposure => [
-          _focusCard('Temperature', '\u00B0F', mockDataService.temperatureStream,
+          _focusCard('Temperature', '\u00B0F', bleService.temperatureStream,
               BioVoltColors.coral, (v) => v.toStringAsFixed(1)),
-          _focusCard('HRV RMSSD', 'ms', mockDataService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
         ],
       SessionType.meditation => [
-          _focusCard('GSR', '\u00B5S', mockDataService.gsrStream,
+          _focusCard('GSR', '\u00B5S', bleService.gsrStream,
               BioVoltColors.amber, (v) => v.toStringAsFixed(2)),
-          _focusCard('Coherence', 'score', mockDataService.coherenceStream,
+          _focusCard('Coherence', 'score', bleService.coherenceStream,
               BioVoltColors.teal, (v) => v.toStringAsFixed(0)),
         ],
       SessionType.fastingCheck => [
-          _focusCard('Heart Rate', 'BPM', mockDataService.heartRateStream,
+          _focusCard('Heart Rate', 'BPM', bleService.heartRateStream,
               BioVoltColors.teal, (v) => v.toStringAsFixed(0)),
-          _focusCard('HRV RMSSD', 'ms', mockDataService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
         ],
       SessionType.grounding => [
-          _focusCard('GSR', '\u00B5S', mockDataService.gsrStream,
+          _focusCard('GSR', '\u00B5S', bleService.gsrStream,
               BioVoltColors.amber, (v) => v.toStringAsFixed(2)),
-          _focusCard('Temperature', '\u00B0F', mockDataService.temperatureStream,
+          _focusCard('Temperature', '\u00B0F', bleService.temperatureStream,
               BioVoltColors.coral, (v) => v.toStringAsFixed(1)),
         ],
     };

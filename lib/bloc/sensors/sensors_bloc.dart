@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../services/mock_data_service.dart';
+import '../../services/ble_service.dart';
 import 'sensors_event.dart';
 import 'sensors_state.dart';
 
 class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
-  final MockDataService _mockService;
+  final BleService _bleService;
   final List<StreamSubscription> _subscriptions = [];
 
-  SensorsBloc({required MockDataService mockService})
-      : _mockService = mockService,
+  SensorsBloc({required BleService bleService})
+      : _bleService = bleService,
         super(const SensorsState()) {
     on<SensorsStarted>(_onStarted);
     on<SensorsStopped>(_onStopped);
@@ -32,17 +32,18 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
   }
 
   void _onStarted(SensorsStarted event, Emitter<SensorsState> emit) {
-    _mockService.start();
-    emit(state.copyWith(isConnected: true));
+    _bleService.start();
 
     _subscriptions.addAll([
-      _mockService.heartRateStream.listen((v) => add(HeartRateUpdated(v))),
-      _mockService.hrvStream.listen((v) => add(HrvUpdated(v))),
-      _mockService.gsrStream.listen((v) => add(GsrUpdated(v))),
-      _mockService.temperatureStream.listen((v) => add(TemperatureUpdated(v))),
-      _mockService.spo2Stream.listen((v) => add(Spo2Updated(v))),
-      _mockService.lfHfStream.listen((v) => add(LfHfUpdated(v))),
-      _mockService.coherenceStream.listen((v) => add(CoherenceUpdated(v))),
+      _bleService.heartRateStream.listen((v) => add(HeartRateUpdated(v))),
+      _bleService.hrvStream.listen((v) => add(HrvUpdated(v))),
+      _bleService.gsrStream.listen((v) => add(GsrUpdated(v))),
+      _bleService.temperatureStream.listen((v) => add(TemperatureUpdated(v))),
+      _bleService.spo2Stream.listen((v) => add(Spo2Updated(v))),
+      _bleService.lfHfStream.listen((v) => add(LfHfUpdated(v))),
+      _bleService.coherenceStream.listen((v) => add(CoherenceUpdated(v))),
+      _bleService.connectionStream.listen((connected) =>
+          emit(state.copyWith(isConnected: connected))),
     ]);
   }
 
@@ -59,7 +60,7 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    _mockService.dispose();
+    _bleService.dispose();
     return super.close();
   }
 }
