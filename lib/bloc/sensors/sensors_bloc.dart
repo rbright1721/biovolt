@@ -45,9 +45,9 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
       _bleService.lfHfStream.listen((v) => add(LfHfUpdated(v))),
       _bleService.coherenceStream.listen((v) => add(CoherenceUpdated(v))),
       _bleService.connectionStream.listen((v) => add(ConnectionUpdated(v))),
+      _bleService.hrvSourceStream.listen((source) =>
+          add(HrvSourceUpdated(source == 'ecg' ? HrvSource.ecg : HrvSource.ppg))),
     ]);
-
-    add(HrvSourceUpdated(HrvSource.ppg));
   }
 
   void _onStopped(SensorsStopped event, Emitter<SensorsState> emit) {
