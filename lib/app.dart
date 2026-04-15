@@ -5,25 +5,32 @@ import 'bloc/sensors/sensors_bloc.dart';
 import 'bloc/sensors/sensors_event.dart';
 import 'bloc/session/session_bloc.dart';
 import 'bloc/session/session_event.dart';
+import 'bloc/session/session_state.dart';
 import 'config/theme.dart';
+import 'screens/analysis_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/data_hub_screen.dart';
 import 'screens/session_history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
 import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
+import 'services/storage_service.dart';
+import 'services/trend_analyst.dart';
 
 class BioVoltApp extends StatefulWidget {
   final SessionStorage sessionStorage;
   final BleService bleService;
   final SessionRecorder sessionRecorder;
+  final TrendAnalyst trendAnalyst;
 
   const BioVoltApp({
     super.key,
     required this.sessionStorage,
     required this.bleService,
     required this.sessionRecorder,
+    required this.trendAnalyst,
   });
 
   @override
@@ -65,7 +72,10 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
-        home: _MainShell(bleService: widget.bleService),
+        home: _MainShell(
+          bleService: widget.bleService,
+          trendAnalyst: widget.trendAnalyst,
+        ),
       ),
     );
   }
@@ -73,8 +83,9 @@ class _BioVoltAppState extends State<BioVoltApp> {
 
 class _MainShell extends StatefulWidget {
   final BleService bleService;
+  final TrendAnalyst trendAnalyst;
 
-  const _MainShell({required this.bleService});
+  const _MainShell({required this.bleService, required this.trendAnalyst});
 
   @override
   State<_MainShell> createState() => _MainShellState();
@@ -88,16 +99,41 @@ class _MainShellState extends State<_MainShell> {
     final screens = [
       DashboardScreen(bleService: widget.bleService),
       const SessionHistoryScreen(),
-      const TrendsScreen(),
+      TrendsScreen(trendAnalyst: widget.trendAnalyst),
+      const DataHubScreen(),
       const SettingsScreen(),
     ];
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+    return BlocListener<SessionBloc, SessionState>(
+      listenWhen: (prev, curr) =>
+          prev.status != SessionStatus.completed &&
+          curr.status == SessionStatus.completed &&
+          curr.analysis != null,
+      listener: (context, state) {
+        // Find the session from storage for the analysis
+        final sessionId = state.analysis!.sessionId;
+        final session = StorageService().getSession(sessionId);
+        if (session != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => BlocProvider.value(
+                value: context.read<SessionBloc>(),
+                child: AnalysisScreen(
+                  session: session,
+                  analysis: state.analysis,
+                ),
+              ),
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: screens,
+        ),
+        bottomNavigationBar: _buildBottomNav(),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -129,7 +165,7 @@ class _MainShellState extends State<_MainShell> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_rounded),
-            label: 'DASHBOARD',
+            label: 'LIVE',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.history_rounded),
@@ -138,6 +174,10 @@ class _MainShellState extends State<_MainShell> {
           BottomNavigationBarItem(
             icon: Icon(Icons.show_chart_rounded),
             label: 'TRENDS',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.hub_rounded),
+            label: 'DATA',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_rounded),

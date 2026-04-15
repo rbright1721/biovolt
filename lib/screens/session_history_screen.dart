@@ -6,6 +6,8 @@ import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
+import '../services/storage_service.dart';
+import 'analysis_screen.dart';
 
 class SessionHistoryScreen extends StatelessWidget {
   const SessionHistoryScreen({super.key});
@@ -100,9 +102,16 @@ class SessionHistoryScreen extends StatelessWidget {
   }
 
   void _showSessionDetail(BuildContext context, Session session) {
+    final analysis = StorageService().getAiAnalysis(session.sessionId);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _SessionDetailScreen(session: session),
+        builder: (_) => BlocProvider.value(
+          value: context.read<SessionBloc>(),
+          child: AnalysisScreen(
+            session: session,
+            analysis: analysis,
+          ),
+        ),
       ),
     );
   }
@@ -230,202 +239,3 @@ class _SessionListCard extends StatelessWidget {
   }
 }
 
-class _SessionDetailScreen extends StatelessWidget {
-  final Session session;
-
-  const _SessionDetailScreen({required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    final dateTime = session.createdAt;
-    final dateStr =
-        '${dateTime.month}/${dateTime.day}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    final type = _sessionTypeFrom(session);
-
-    return Scaffold(
-      backgroundColor: BioVoltColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded,
-                        color: BioVoltColors.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 4),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (type?.displayName ?? 'Session').toUpperCase(),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: BioVoltColors.teal,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      Text(
-                        '$dateStr  \u2022  ${_formatDuration(session.durationSeconds)}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: BioVoltColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: session.biometrics?.computed == null
-                  ? Center(
-                      child: Text(
-                        'No data recorded',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 13,
-                          color: BioVoltColors.textSecondary,
-                        ),
-                      ),
-                    )
-                  : _buildMetricsSummary(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMetricsSummary() {
-    final computed = session.biometrics!.computed!;
-    final esp32 = session.biometrics?.esp32;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          // Primary stats row
-          Row(
-            children: [
-              _summaryBox(
-                'Avg HR',
-                computed.heartRateMeanBpm != null
-                    ? '${computed.heartRateMeanBpm!.toStringAsFixed(0)} BPM'
-                    : '--',
-                BioVoltColors.teal,
-              ),
-              const SizedBox(width: 10),
-              _summaryBox(
-                'Avg HRV',
-                computed.hrvRmssdMs != null
-                    ? '${computed.hrvRmssdMs!.toStringAsFixed(1)} ms'
-                    : '--',
-                BioVoltColors.teal,
-              ),
-              const SizedBox(width: 10),
-              _summaryBox(
-                'Coherence',
-                computed.coherenceScore != null
-                    ? computed.coherenceScore!.toStringAsFixed(0)
-                    : '--',
-                BioVoltColors.teal,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Secondary stats row
-          Row(
-            children: [
-              _summaryBox(
-                'Min HR',
-                computed.heartRateMinBpm != null
-                    ? '${computed.heartRateMinBpm!.toStringAsFixed(0)} BPM'
-                    : '--',
-                BioVoltColors.teal,
-              ),
-              const SizedBox(width: 10),
-              _summaryBox(
-                'Max HR',
-                computed.heartRateMaxBpm != null
-                    ? '${computed.heartRateMaxBpm!.toStringAsFixed(0)} BPM'
-                    : '--',
-                BioVoltColors.amber,
-              ),
-              const SizedBox(width: 10),
-              _summaryBox(
-                'LF/HF',
-                computed.lfHfProxy != null
-                    ? computed.lfHfProxy!.toStringAsFixed(2)
-                    : '--',
-                BioVoltColors.amber,
-              ),
-            ],
-          ),
-          if (esp32 != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _summaryBox(
-                  'Avg GSR',
-                  esp32.gsrMeanUs != null
-                      ? '${esp32.gsrMeanUs!.toStringAsFixed(2)} \u00B5S'
-                      : '--',
-                  BioVoltColors.amber,
-                ),
-                const SizedBox(width: 10),
-                _summaryBox(
-                  'Avg Temp',
-                  esp32.skinTempC != null
-                      ? '${esp32.skinTempC!.toStringAsFixed(1)} \u00B0C'
-                      : '--',
-                  BioVoltColors.coral,
-                ),
-                const SizedBox(width: 10),
-                _summaryBox(
-                  'SpO2',
-                  esp32.spo2Percent != null
-                      ? '${esp32.spo2Percent!.toStringAsFixed(0)}%'
-                      : '--',
-                  BioVoltColors.teal,
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryBox(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-        decoration: BioVoltTheme.glassCard(glowColor: color),
-        child: Column(
-          children: [
-            Text(
-              label.toUpperCase(),
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: BioVoltColors.textSecondary,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: BioVoltTheme.valueStyle(14, color: color),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

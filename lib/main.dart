@@ -11,6 +11,7 @@ import 'services/prompt_builder.dart';
 import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
+import 'services/trend_analyst.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,9 +60,17 @@ void main() async {
     connectorRegistry: registry,
   );
 
+  // Trend analyst
+  final trendAnalyst = TrendAnalyst(
+    storage: storageService,
+    aiService: aiService,
+    promptBuilder: promptBuilder,
+  );
+
   runApp(BioVoltApp(
     sessionStorage: sessionStorage,
     bleService: bleService,
     sessionRecorder: sessionRecorder,
+    trendAnalyst: trendAnalyst,
   ));
 }

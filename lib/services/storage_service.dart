@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
+import '../models/bloodwork.dart';
 import '../models/interventions.dart';
 import '../models/normalized_record.dart';
 import '../models/oura_daily.dart';
@@ -23,6 +24,7 @@ class StorageService {
   late Box<UserProfile> _userProfileBox;
   late Box<ConnectorState> _connectorStatesBox;
   late Box _biometricRecordsBox;
+  late Box<Bloodwork> _bloodworkBox;
 
   bool _initialized = false;
 
@@ -79,6 +81,9 @@ class StorageService {
     Hive.registerAdapter(UserProfileAdapter());
     Hive.registerAdapter(ConnectorStateAdapter());
 
+    // -- Bloodwork --
+    Hive.registerAdapter(BloodworkAdapter());
+
     // -- Legacy / real-time types --
     Hive.registerAdapter(SessionTypeAdapter());
     Hive.registerAdapter(SensorSnapshotAdapter());
@@ -92,6 +97,7 @@ class StorageService {
     _connectorStatesBox =
         await Hive.openBox<ConnectorState>('connector_states');
     _biometricRecordsBox = await Hive.openBox('biometric_records');
+    _bloodworkBox = await Hive.openBox<Bloodwork>('bloodwork');
 
     _initialized = true;
   }
@@ -181,6 +187,26 @@ class StorageService {
       _connectorStatesBox.values.toList();
 
   // ---------------------------------------------------------------------------
+  // Bloodwork
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveBloodwork(Bloodwork bloodwork) async {
+    await _bloodworkBox.put(bloodwork.id, bloodwork);
+  }
+
+  Bloodwork? getBloodwork(String id) => _bloodworkBox.get(id);
+
+  List<Bloodwork> getAllBloodwork() {
+    final list = _bloodworkBox.values.toList();
+    list.sort((a, b) => b.labDate.compareTo(a.labDate));
+    return list;
+  }
+
+  Future<void> deleteBloodwork(String id) async {
+    await _bloodworkBox.delete(id);
+  }
+
+  // ---------------------------------------------------------------------------
   // Utility
   // ---------------------------------------------------------------------------
 
@@ -192,5 +218,6 @@ class StorageService {
     await _userProfileBox.clear();
     await _connectorStatesBox.clear();
     await _biometricRecordsBox.clear();
+    await _bloodworkBox.clear();
   }
 }
