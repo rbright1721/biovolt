@@ -73,13 +73,16 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       aiModel: fields[10] as String?,
       preferredUnits: fields[11] as String,
       aiCoachingStyle: fields[12] as String?,
+      mthfr: fields[13] as String?,
+      apoe: fields[14] as String?,
+      comt: fields[15] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfile obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.userId)
       ..writeByte(1)
@@ -105,7 +108,13 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       ..writeByte(11)
       ..write(obj.preferredUnits)
       ..writeByte(12)
-      ..write(obj.aiCoachingStyle);
+      ..write(obj.aiCoachingStyle)
+      ..writeByte(13)
+      ..write(obj.mthfr)
+      ..writeByte(14)
+      ..write(obj.apoe)
+      ..writeByte(15)
+      ..write(obj.comt);
   }
 
   @override

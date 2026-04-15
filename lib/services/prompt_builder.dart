@@ -109,6 +109,30 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
       if (profile.knownConditions.isNotEmpty) {
         buf.writeln('Known conditions: ${profile.knownConditions.join(', ')}');
       }
+      if (profile.aiCoachingStyle != null) {
+        buf.writeln('Coaching style preference: ${profile.aiCoachingStyle}');
+      }
+
+      // Genetic context
+      final hasGenetics = profile.mthfr != null ||
+          profile.apoe != null ||
+          profile.comt != null;
+      if (hasGenetics) {
+        buf.writeln();
+        buf.writeln('=== GENETIC CONTEXT ===');
+        if (profile.mthfr != null) {
+          buf.writeln(
+              'MTHFR: ${profile.mthfr} \u2014 ${_mthfrDescription(profile.mthfr!)}');
+        }
+        if (profile.apoe != null) {
+          buf.writeln(
+              'APOE: ${profile.apoe} \u2014 ${_apoeDescription(profile.apoe!)}');
+        }
+        if (profile.comt != null) {
+          buf.writeln(
+              'COMT: ${profile.comt} \u2014 ${_comtDescription(profile.comt!)}');
+        }
+      }
     } else {
       buf.writeln('No user profile configured.');
     }
@@ -482,4 +506,33 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
     if (values.isEmpty) return null;
     return values.reduce((a, b) => a + b) / values.length;
   }
+
+  String _mthfrDescription(String variant) => switch (variant) {
+        'C677T het' =>
+          'heterozygous — ~35% reduced methylation, moderate homocysteine risk',
+        'C677T hom' =>
+          'homozygous — ~70% reduced methylation, higher homocysteine risk',
+        'A1298C' =>
+          'A1298C variant — mild BH4 impact, less clinically significant',
+        'Normal' => 'no significant variants — normal methylation',
+        _ => variant,
+      };
+
+  String _apoeDescription(String variant) => switch (variant) {
+        'E3/E3' => 'standard cardiovascular risk profile',
+        'E3/E4' =>
+          'one E4 allele — elevated cardiovascular and Alzheimer risk, optimize lipids',
+        'E4/E4' =>
+          'two E4 alleles — significantly elevated risk, prioritize cardiovascular and cognitive protocols',
+        _ => variant,
+      };
+
+  String _comtDescription(String variant) => switch (variant) {
+        'Val/Val (fast)' =>
+          'fast COMT — rapid dopamine clearance, may benefit from dopamine support',
+        'Val/Met' => 'moderate dopamine clearance — balanced profile',
+        'Met/Met (slow)' =>
+          'slow COMT — higher dopamine/catecholamine levels, stress-sensitive, avoid excess stimulants',
+        _ => variant,
+      };
 }

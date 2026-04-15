@@ -11,6 +11,7 @@ import 'screens/analysis_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/data_hub_screen.dart';
 import 'screens/session_history_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
@@ -24,6 +25,7 @@ class BioVoltApp extends StatefulWidget {
   final BleService bleService;
   final SessionRecorder sessionRecorder;
   final TrendAnalyst trendAnalyst;
+  final bool firstLaunch;
 
   const BioVoltApp({
     super.key,
@@ -31,6 +33,7 @@ class BioVoltApp extends StatefulWidget {
     required this.bleService,
     required this.sessionRecorder,
     required this.trendAnalyst,
+    this.firstLaunch = false,
   });
 
   @override
@@ -72,10 +75,15 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
-        home: _MainShell(
-          bleService: widget.bleService,
-          trendAnalyst: widget.trendAnalyst,
-        ),
+        home: widget.firstLaunch
+            ? _FirstLaunchWrapper(
+                bleService: widget.bleService,
+                trendAnalyst: widget.trendAnalyst,
+              )
+            : _MainShell(
+                bleService: widget.bleService,
+                trendAnalyst: widget.trendAnalyst,
+              ),
       ),
     );
   }
@@ -186,5 +194,48 @@ class _MainShellState extends State<_MainShell> {
         ],
       ),
     );
+  }
+}
+
+/// Shows ProfileScreen first, then replaces with MainShell after profile is saved.
+class _FirstLaunchWrapper extends StatefulWidget {
+  final BleService bleService;
+  final TrendAnalyst trendAnalyst;
+
+  const _FirstLaunchWrapper({
+    required this.bleService,
+    required this.trendAnalyst,
+  });
+
+  @override
+  State<_FirstLaunchWrapper> createState() => _FirstLaunchWrapperState();
+}
+
+class _FirstLaunchWrapperState extends State<_FirstLaunchWrapper> {
+  bool _profileDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+            builder: (_) => const ProfileScreen(isFirstLaunch: true),
+          ))
+          .then((_) {
+        if (mounted) setState(() => _profileDone = true);
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_profileDone) {
+      return _MainShell(
+        bleService: widget.bleService,
+        trendAnalyst: widget.trendAnalyst,
+      );
+    }
+    return const Scaffold(backgroundColor: BioVoltColors.background);
   }
 }

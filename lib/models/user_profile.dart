@@ -98,6 +98,15 @@ class UserProfile {
   @HiveField(12)
   final String? aiCoachingStyle;
 
+  @HiveField(13)
+  final String? mthfr;
+
+  @HiveField(14)
+  final String? apoe;
+
+  @HiveField(15)
+  final String? comt;
+
   UserProfile({
     required this.userId,
     required this.createdAt,
@@ -112,6 +121,9 @@ class UserProfile {
     this.aiModel,
     required this.preferredUnits,
     this.aiCoachingStyle,
+    this.mthfr,
+    this.apoe,
+    this.comt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -128,6 +140,9 @@ class UserProfile {
         'aiModel': aiModel,
         'preferredUnits': preferredUnits,
         'aiCoachingStyle': aiCoachingStyle,
+        'mthfr': mthfr,
+        'apoe': apoe,
+        'comt': comt,
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -150,5 +165,8 @@ class UserProfile {
         aiModel: json['aiModel'] as String?,
         preferredUnits: json['preferredUnits'] as String,
         aiCoachingStyle: json['aiCoachingStyle'] as String?,
+        mthfr: json['mthfr'] as String?,
+        apoe: json['apoe'] as String?,
+        comt: json['comt'] as String?,
       );
 }

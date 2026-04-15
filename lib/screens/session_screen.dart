@@ -5,6 +5,7 @@ import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
+import '../services/storage_service.dart';
 import '../models/breathwork_pattern.dart';
 import '../models/session_type.dart';
 import '../services/ble_service.dart';
@@ -14,6 +15,7 @@ import '../widgets/session_guidance.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/spo2_safety_monitor.dart';
 import '../widgets/wim_hof_pacer.dart';
+import 'post_session_screen.dart';
 
 class SessionScreen extends StatelessWidget {
   final BleService bleService;
@@ -22,7 +24,31 @@ class SessionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SessionBloc, SessionState>(
+    return BlocListener<SessionBloc, SessionState>(
+      listenWhen: (prev, curr) =>
+          prev.status == SessionStatus.stopping &&
+          curr.status == SessionStatus.idle,
+      listener: (context, state) {
+        // Session finalized — get it from storage and navigate to post-session
+        final sessionId = state.history.isNotEmpty
+            ? state.history.first.sessionId
+            : null;
+        if (sessionId != null) {
+          final session =
+              StorageService().getSession(sessionId);
+          if (session != null && context.mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => BlocProvider.value(
+                  value: context.read<SessionBloc>(),
+                  child: PostSessionScreen(session: session),
+                ),
+              ),
+            );
+          }
+        }
+      },
+      child: BlocBuilder<SessionBloc, SessionState>(
       builder: (context, state) {
         if (state.activeSession == null || state.selectedType == null) {
           return const Scaffold(
@@ -76,6 +102,7 @@ class SessionScreen extends StatelessWidget {
           ),
         );
       },
+    ),
     );
   }
 
@@ -98,7 +125,6 @@ class SessionScreen extends StatelessWidget {
             icon: const Icon(Icons.close, color: BioVoltColors.textSecondary),
             onPressed: () {
               context.read<SessionBloc>().add(SessionStopped());
-              Navigator.of(context).pop();
             },
           ),
           const SizedBox(width: 8),
@@ -483,7 +509,6 @@ class SessionScreen extends StatelessWidget {
             color: BioVoltColors.coral,
             onTap: () {
               bloc.add(SessionStopped());
-              Navigator.of(context).pop();
             },
           ),
         ],

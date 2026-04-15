@@ -41,7 +41,6 @@ void main() async {
   // Register Polar H10 connector
   final polarConnector = PolarConnector();
   registry.register(polarConnector);
-  // Auto-reconnect if previously paired
   polarConnector.authenticate().catchError((_) {});
 
   // Register Oura Ring connector
@@ -74,10 +73,15 @@ void main() async {
     promptBuilder: promptBuilder,
   );
 
+  // First-launch detection
+  final profile = storageService.getUserProfile();
+  final firstLaunch = profile == null;
+
   runApp(BioVoltApp(
     sessionStorage: sessionStorage,
     bleService: bleService,
     sessionRecorder: sessionRecorder,
     trendAnalyst: trendAnalyst,
+    firstLaunch: firstLaunch,
   ));
 }

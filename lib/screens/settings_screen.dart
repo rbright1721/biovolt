@@ -9,6 +9,7 @@ import '../services/ai_config_service.dart';
 import '../services/ai_service.dart';
 import '../services/oura_sync_service.dart';
 import '../services/storage_service.dart';
+import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -108,6 +109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
                   const SizedBox(height: 8),
+                  _buildProfileButton(),
+                  const SizedBox(height: 24),
                   _buildAiSection(),
                   const SizedBox(height: 24),
                   _buildDevicesSection(),
@@ -128,6 +131,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ---------------------------------------------------------------------------
   // AI Configuration
   // ---------------------------------------------------------------------------
+
+  Widget _buildProfileButton() {
+    final profile = _storage.getUserProfile();
+    final hasProfile = profile != null && profile.healthGoals.isNotEmpty;
+
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        );
+        _loadStats();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BioVoltTheme.glassCard(
+          glowColor: hasProfile ? BioVoltColors.teal : BioVoltColors.amber,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.person_rounded,
+              size: 20,
+              color: hasProfile
+                  ? BioVoltColors.teal
+                  : BioVoltColors.amber,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasProfile ? 'EDIT PROFILE' : 'SET UP PROFILE',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: BioVoltColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    hasProfile
+                        ? 'Goals: ${profile.healthGoals.join(', ')}'
+                        : 'Required for personalized AI analysis',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      color: BioVoltColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: BioVoltColors.textSecondary.withAlpha(80),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildAiSection() {
     return _Section(
