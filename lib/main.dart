@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'app.dart';
 import 'connectors/connector_esp32.dart';
 import 'connectors/connector_oura.dart';
+import 'connectors/connector_polar.dart';
 import 'connectors/connector_registry.dart';
 import 'services/ai_service.dart';
 import 'services/ble_service.dart';
@@ -36,6 +37,12 @@ void main() async {
   final bleService = BleService();
   final registry = ConnectorRegistry.instance;
   registry.register(Esp32Connector(bleService: bleService));
+
+  // Register Polar H10 connector
+  final polarConnector = PolarConnector();
+  registry.register(polarConnector);
+  // Auto-reconnect if previously paired
+  polarConnector.authenticate().catchError((_) {});
 
   // Register Oura Ring connector
   final ouraConnector = OuraConnector();

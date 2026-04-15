@@ -5,18 +5,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../bloc/sensors/sensors_bloc.dart';
 import '../bloc/sensors/sensors_event.dart';
 import '../bloc/sensors/sensors_state.dart';
-import '../bloc/session/session_bloc.dart';
-import '../bloc/session/session_event.dart';
-import '../models/session_type.dart';
-import '../widgets/pattern_selector.dart';
 import '../config/theme.dart';
 import '../services/ble_service.dart';
 import '../models/signal_info.dart';
 import '../widgets/live_waveform.dart';
-import '../widgets/session_type_sheet.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_info_sheet.dart';
-import 'session_screen.dart';
+import 'pre_session_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   final BleService bleService;
@@ -58,50 +53,9 @@ class DashboardScreen extends StatelessWidget {
   }
 
   void _showSessionSelector(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => SessionTypeSheet(
-        onSelected: (type) {
-          if (type == SessionType.breathwork) {
-            _showPatternSelector(context);
-          } else {
-            _startSession(context, type);
-          }
-        },
-      ),
-    );
-  }
-
-  void _showPatternSelector(BuildContext context) async {
-    final pattern = await PatternSelector.show(context);
-    if (pattern == null || !context.mounted) return;
-
-    final bloc = context.read<SessionBloc>();
-    bloc.add(SessionTypeSelected(SessionType.breathwork));
-    bloc.add(BreathworkPatternSelected(pattern.id));
-    bloc.add(SessionStarted());
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: bloc,
-          child: SessionScreen(bleService: bleService),
-        ),
-      ),
-    );
-  }
-
-  void _startSession(BuildContext context, SessionType type) {
-    final bloc = context.read<SessionBloc>();
-    bloc.add(SessionTypeSelected(type));
-    bloc.add(SessionStarted());
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: bloc,
-          child: SessionScreen(bleService: bleService),
-        ),
+        builder: (_) => PreSessionScreen(bleService: bleService),
       ),
     );
   }
