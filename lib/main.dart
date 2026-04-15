@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
 import 'connectors/connector_esp32.dart';
+import 'connectors/connector_oura.dart';
 import 'connectors/connector_registry.dart';
 import 'services/ble_service.dart';
+import 'services/oura_sync_service.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
 
@@ -30,6 +32,18 @@ void main() async {
   final bleService = BleService();
   final registry = ConnectorRegistry.instance;
   registry.register(Esp32Connector(bleService: bleService));
+
+  // Register Oura Ring connector
+  final ouraConnector = OuraConnector();
+  registry.register(ouraConnector);
+
+  // Trigger background Oura sync (non-blocking)
+  final ouraSync = OuraSyncService(
+    connector: ouraConnector,
+    storage: storageService,
+  );
+  // Don't await — authenticate checks for stored PAT, sync runs in background
+  ouraConnector.authenticate().then((_) => ouraSync.syncMissingDays());
 
   runApp(BioVoltApp(
     sessionStorage: sessionStorage,
