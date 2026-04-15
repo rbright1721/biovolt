@@ -59,6 +59,10 @@ class SessionScreen extends StatelessWidget {
                           const SizedBox(height: 16),
                           _buildSessionEcgStrip(),
                         ],
+                        if (state.coachMessage != null) ...[
+                          const SizedBox(height: 16),
+                          _CoachMessageBanner(message: state.coachMessage!),
+                        ],
                         const SizedBox(height: 24),
                         _buildFocusCards(state),
                         const SizedBox(height: 100),
@@ -591,6 +595,53 @@ class _LargeMetricDisplayState extends State<_LargeMetricDisplay> {
         ),
         const SizedBox(height: 30),
       ],
+    );
+  }
+}
+
+class _CoachMessageBanner extends StatelessWidget {
+  final String message;
+
+  const _CoachMessageBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Container(
+        key: ValueKey(message),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: BioVoltColors.teal.withAlpha(12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: BioVoltColors.teal.withAlpha(40)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 14,
+                color: BioVoltColors.teal.withAlpha(180),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: BioVoltColors.textPrimary,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

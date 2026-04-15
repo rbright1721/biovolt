@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/sensors/sensors_bloc.dart';
 import '../../models/sensor_snapshot.dart';
 import '../../models/session.dart';
+import '../../services/session_recorder.dart';
 import '../../services/session_storage.dart';
 import 'session_event.dart';
 import 'session_state.dart';
@@ -10,11 +11,17 @@ import 'session_state.dart';
 class SessionBloc extends Bloc<SessionEvent, SessionState> {
   final SensorsBloc sensorsBloc;
   final SessionStorage storage;
+  final SessionRecorder sessionRecorder;
   Timer? _recordTimer;
   Timer? _elapsedTimer;
+  StreamSubscription? _coachSub;
+  StreamSubscription? _analysisSub;
 
-  SessionBloc({required this.sensorsBloc, required this.storage})
-      : super(const SessionState()) {
+  SessionBloc({
+    required this.sensorsBloc,
+    required this.storage,
+    required this.sessionRecorder,
+  }) : super(const SessionState()) {
     on<SessionTypeSelected>(_onTypeSelected);
     on<SessionStarted>(_onStarted);
     on<SessionPaused>(_onPaused);
@@ -25,6 +32,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     on<SessionElapsedTick>(_onElapsedTick);
     on<BreathworkPatternSelected>(_onBreathworkPatternSelected);
     on<WimHofRetentionRecorded>(_onWimHofRetentionRecorded);
+    on<SessionCoachReceived>(_onCoachReceived);
+    on<SessionAnalysisReceived>(_onAnalysisReceived);
   }
 
   void _onTypeSelected(
@@ -47,23 +56,34 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     final type = state.selectedType;
     if (type == null) return;
 
-    final now = DateTime.now();
-    final session = Session(
-      sessionId: now.millisecondsSinceEpoch.toString(),
-      userId: 'local',
-      createdAt: now,
-      timezone: now.timeZoneName,
-      dataSources: ['esp32'],
-      context: SessionContext(
-        activities: [
-          SessionActivity(
-            type: type.name,
-            subtype: state.breathworkPatternId,
-            startOffsetSeconds: 0,
-          ),
-        ],
-      ),
+    // Build SessionContext from the selected type
+    final context = SessionContext(
+      activities: [
+        SessionActivity(
+          type: type.name,
+          subtype: state.breathworkPatternId,
+          startOffsetSeconds: 0,
+        ),
+      ],
     );
+
+    // Start the recorder — it subscribes to connector live streams
+    final sessionId = sessionRecorder.startSession(context);
+
+    // Subscribe to coach stream
+    _coachSub?.cancel();
+    _coachSub = sessionRecorder.coachStream.listen((msg) {
+      add(SessionCoachReceived(msg));
+    });
+
+    // Subscribe to analysis complete stream
+    _analysisSub?.cancel();
+    _analysisSub = sessionRecorder.analysisCompleteStream.listen((analysis) {
+      add(SessionAnalysisReceived(analysis));
+    });
+
+    // Get the active session from the recorder
+    final session = sessionRecorder.activeSession;
 
     emit(state.copyWith(
       status: SessionStatus.active,
@@ -71,10 +91,12 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       snapshots: [],
       elapsed: Duration.zero,
       retentionHoldSeconds: state.breathworkPatternId == 'wimHof' ? [] : null,
+      clearCoachMessage: true,
+      clearAnalysis: true,
     ));
 
     _startRecording();
-    _startElapsedTimer();
+    _startElapsedTimer(sessionId);
   }
 
   void _onPaused(SessionPaused event, Emitter<SessionState> emit) {
@@ -86,29 +108,62 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   void _onResumed(SessionResumed event, Emitter<SessionState> emit) {
     emit(state.copyWith(status: SessionStatus.active));
     _startRecording();
-    _startElapsedTimer();
+    if (state.activeSession != null) {
+      _startElapsedTimer(state.activeSession!.sessionId);
+    }
   }
 
   void _onStopped(SessionStopped event, Emitter<SessionState> emit) async {
     _recordTimer?.cancel();
     _elapsedTimer?.cancel();
 
-    final baseSession = state.activeSession;
-    if (baseSession != null) {
-      final finalSession = _buildFinalSession(baseSession, state.snapshots);
-      await storage.saveSession(finalSession);
+    if (sessionRecorder.isRecording) {
+      // Emit stopping state while analysis runs in background
+      emit(state.copyWith(status: SessionStatus.stopping));
+
+      final finalSession = await sessionRecorder.stopSession();
+
+      final history = storage.getAllSessions();
+
+      emit(state.copyWith(
+        status: SessionStatus.idle,
+        clearActiveSession: true,
+        clearBreathworkPattern: true,
+        activeSession: finalSession,
+        snapshots: const [],
+        history: history,
+        elapsed: Duration.zero,
+        retentionHoldSeconds: const [],
+        clearCoachMessage: true,
+      ));
+
+      // Clear the stashed final session from state after a tick
+      emit(state.copyWith(clearActiveSession: true));
+    } else {
+      // Fallback: no recorder active, just reset
+      emit(state.copyWith(
+        status: SessionStatus.idle,
+        clearActiveSession: true,
+        clearBreathworkPattern: true,
+        snapshots: const [],
+        history: storage.getAllSessions(),
+        elapsed: Duration.zero,
+        retentionHoldSeconds: const [],
+        clearCoachMessage: true,
+      ));
     }
+  }
 
-    final history = storage.getAllSessions();
+  void _onCoachReceived(
+      SessionCoachReceived event, Emitter<SessionState> emit) {
+    emit(state.copyWith(coachMessage: event.message));
+  }
 
+  void _onAnalysisReceived(
+      SessionAnalysisReceived event, Emitter<SessionState> emit) {
     emit(state.copyWith(
-      status: SessionStatus.idle,
-      clearActiveSession: true,
-      clearBreathworkPattern: true,
-      snapshots: const [],
-      history: history,
-      elapsed: Duration.zero,
-      retentionHoldSeconds: const [],
+      status: SessionStatus.completed,
+      analysis: event.analysis,
     ));
   }
 
@@ -144,69 +199,22 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     emit(state.copyWith(elapsed: event.elapsed));
   }
 
-  void _startElapsedTimer() {
+  void _startElapsedTimer(String sessionId) {
     _elapsedTimer?.cancel();
+    final session = sessionRecorder.activeSession;
+    final startTime = session?.createdAt ?? DateTime.now();
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (state.activeSession != null) {
-        final elapsed = DateTime.now().difference(state.activeSession!.createdAt);
-        add(SessionElapsedTick(elapsed));
-      }
+      final elapsed = DateTime.now().difference(startTime);
+      add(SessionElapsedTick(elapsed));
     });
-  }
-
-  /// Build the final persisted [Session] with computed biometrics from
-  /// the collected [SensorSnapshot] list.
-  Session _buildFinalSession(
-      Session base, List<SensorSnapshot> snapshots) {
-    final durationSeconds = state.elapsed.inSeconds;
-
-    Esp32Metrics? esp32;
-    ComputedMetrics? computed;
-
-    if (snapshots.isNotEmpty) {
-      double avg(double Function(SensorSnapshot) f) =>
-          snapshots.map(f).reduce((a, b) => a + b) / snapshots.length;
-
-      esp32 = Esp32Metrics(
-        heartRateBpm: avg((s) => s.heartRate),
-        hrvRmssdMs: avg((s) => s.hrv),
-        spo2Percent: avg((s) => s.spo2),
-        gsrMeanUs: avg((s) => s.gsr),
-        skinTempC: avg((s) => s.temperature),
-      );
-
-      final hrs = snapshots.map((s) => s.heartRate).toList();
-      computed = ComputedMetrics(
-        hrSource: 'esp32',
-        hrvSource: 'esp32',
-        heartRateMeanBpm: avg((s) => s.heartRate),
-        heartRateMinBpm: hrs.reduce((a, b) => a < b ? a : b),
-        heartRateMaxBpm: hrs.reduce((a, b) => a > b ? a : b),
-        hrvRmssdMs: avg((s) => s.hrv),
-        coherenceScore: avg((s) => s.coherence),
-        lfHfProxy: avg((s) => s.lfHfRatio),
-      );
-    }
-
-    return Session(
-      sessionId: base.sessionId,
-      userId: base.userId,
-      createdAt: base.createdAt,
-      timezone: base.timezone,
-      durationSeconds: durationSeconds,
-      dataSources: base.dataSources,
-      context: base.context,
-      biometrics: SessionBiometrics(
-        esp32: esp32,
-        computed: computed,
-      ),
-    );
   }
 
   @override
   Future<void> close() {
     _recordTimer?.cancel();
     _elapsedTimer?.cancel();
+    _coachSub?.cancel();
+    _analysisSub?.cancel();
     return super.close();
   }
 }

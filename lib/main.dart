@@ -4,8 +4,11 @@ import 'app.dart';
 import 'connectors/connector_esp32.dart';
 import 'connectors/connector_oura.dart';
 import 'connectors/connector_registry.dart';
+import 'services/ai_service.dart';
 import 'services/ble_service.dart';
 import 'services/oura_sync_service.dart';
+import 'services/prompt_builder.dart';
+import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
 
@@ -42,11 +45,23 @@ void main() async {
     connector: ouraConnector,
     storage: storageService,
   );
-  // Don't await — authenticate checks for stored PAT, sync runs in background
   ouraConnector.authenticate().then((_) => ouraSync.syncMissingDays());
+
+  // AI services
+  final aiService = AiService();
+  final promptBuilder = PromptBuilder(storage: storageService);
+
+  // Session recorder
+  final sessionRecorder = SessionRecorder(
+    storage: storageService,
+    aiService: aiService,
+    promptBuilder: promptBuilder,
+    connectorRegistry: registry,
+  );
 
   runApp(BioVoltApp(
     sessionStorage: sessionStorage,
     bleService: bleService,
+    sessionRecorder: sessionRecorder,
   ));
 }

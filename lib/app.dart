@@ -11,16 +11,19 @@ import 'screens/session_history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
+import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 
 class BioVoltApp extends StatefulWidget {
   final SessionStorage sessionStorage;
   final BleService bleService;
+  final SessionRecorder sessionRecorder;
 
   const BioVoltApp({
     super.key,
     required this.sessionStorage,
     required this.bleService,
+    required this.sessionRecorder,
   });
 
   @override
@@ -31,6 +34,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
   @override
   void dispose() {
     widget.bleService.dispose();
+    widget.sessionRecorder.dispose();
     super.dispose();
   }
 
@@ -50,6 +54,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
             final bloc = SessionBloc(
               sensorsBloc: ctx.read<SensorsBloc>(),
               storage: widget.sessionStorage,
+              sessionRecorder: widget.sessionRecorder,
             );
             bloc.add(SessionHistoryLoaded());
             return bloc;
