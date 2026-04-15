@@ -6,7 +6,7 @@ import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/breathwork_pattern.dart';
-import '../models/session.dart';
+import '../models/session_type.dart';
 import '../services/ble_service.dart';
 import '../widgets/breathing_pacer.dart';
 import '../widgets/live_waveform.dart';
@@ -24,7 +24,7 @@ class SessionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SessionBloc, SessionState>(
       builder: (context, state) {
-        if (state.activeSession == null) {
+        if (state.activeSession == null || state.selectedType == null) {
           return const Scaffold(
             backgroundColor: BioVoltColors.background,
             body: Center(child: Text('No active session')),
@@ -43,7 +43,7 @@ class SessionScreen extends StatelessWidget {
               children: [
                 _buildHeader(context, state),
                 SessionGuidancePanel(
-                  sessionType: state.activeSession!.type,
+                  sessionType: state.selectedType!,
                   initiallyExpanded: true,
                 ),
                 if (isAlteredState)
@@ -55,7 +55,7 @@ class SessionScreen extends StatelessWidget {
                       children: [
                         const SizedBox(height: 8),
                         _buildMainContent(context, state),
-                        if (_showsEcgWaveform(state.activeSession!.type)) ...[
+                        if (_showsEcgWaveform(state.selectedType!)) ...[
                           const SizedBox(height: 16),
                           _buildSessionEcgStrip(),
                         ],
@@ -76,10 +76,10 @@ class SessionScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, SessionState state) {
-    final session = state.activeSession!;
     final elapsed = state.elapsed;
     final minutes = elapsed.inMinutes.toString().padLeft(2, '0');
     final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    final type = state.selectedType!;
 
     final patternInfo = state.breathworkPatternId != null
         ? BreathworkPatterns.byId(state.breathworkPatternId!)
@@ -104,7 +104,7 @@ class SessionScreen extends StatelessWidget {
               children: [
                 Text(
                   patternInfo?.name.toUpperCase() ??
-                      session.type.displayName.toUpperCase(),
+                      type.displayName.toUpperCase(),
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -114,14 +114,13 @@ class SessionScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  session.type.focusSignals,
+                  type.focusSignals,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          // Elapsed timer
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -162,7 +161,7 @@ class SessionScreen extends StatelessWidget {
   }
 
   Widget _buildMainContent(BuildContext context, SessionState state) {
-    final type = state.activeSession!.type;
+    final type = state.selectedType!;
 
     switch (type) {
       case SessionType.breathwork:
@@ -390,7 +389,7 @@ class SessionScreen extends StatelessWidget {
   }
 
   Widget _buildFocusCards(SessionState state) {
-    final type = state.activeSession!.type;
+    final type = state.selectedType!;
 
     final cards = switch (type) {
       SessionType.breathwork => [
@@ -461,7 +460,6 @@ class SessionScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Pause / Resume
           _ControlButton(
             icon: isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
             label: isActive ? 'PAUSE' : 'RESUME',
@@ -475,7 +473,6 @@ class SessionScreen extends StatelessWidget {
             },
           ),
           const SizedBox(width: 32),
-          // Stop
           _ControlButton(
             icon: Icons.stop_rounded,
             label: 'STOP',

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/session.dart';
+import '../models/session_type.dart';
 
 class SessionHistoryScreen extends StatelessWidget {
   const SessionHistoryScreen({super.key});
@@ -108,6 +108,23 @@ class SessionHistoryScreen extends StatelessWidget {
   }
 }
 
+/// Resolve a [SessionType] from the first activity in a [Session]'s context.
+SessionType? _sessionTypeFrom(Session session) {
+  final typeName = session.context?.activities.firstOrNull?.type;
+  if (typeName == null) return null;
+  for (final t in SessionType.values) {
+    if (t.name == typeName) return t;
+  }
+  return null;
+}
+
+String _formatDuration(int? seconds) {
+  if (seconds == null) return '--:--';
+  final m = (seconds ~/ 60).toString().padLeft(2, '0');
+  final s = (seconds % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
+
 class _SessionListCard extends StatelessWidget {
   final Session session;
   final VoidCallback onTap;
@@ -116,13 +133,12 @@ class _SessionListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateTime =
-        DateTime.fromMillisecondsSinceEpoch(session.startTimeMs);
-    final dateStr =
-        '${dateTime.month}/${dateTime.day}/${dateTime.year}';
+    final dateTime = session.createdAt;
+    final dateStr = '${dateTime.month}/${dateTime.day}/${dateTime.year}';
     final timeStr =
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    final summary = _buildSummary();
+    final type = _sessionTypeFrom(session);
+    final summary = _buildSummary(type);
 
     return GestureDetector(
       onTap: onTap,
@@ -131,7 +147,6 @@ class _SessionListCard extends StatelessWidget {
         decoration: BioVoltTheme.glassCard(glowColor: BioVoltColors.teal),
         child: Row(
           children: [
-            // Type icon
             Container(
               width: 40,
               height: 40,
@@ -141,18 +156,17 @@ class _SessionListCard extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text(
-                session.type.iconChar,
+                type?.iconChar ?? '\u{2753}',
                 style: const TextStyle(fontSize: 18),
               ),
             ),
             const SizedBox(width: 14),
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    session.type.displayName,
+                    type?.displayName ?? 'Session',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -161,7 +175,7 @@ class _SessionListCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '$dateStr  $timeStr  \u2022  ${session.durationFormatted}',
+                    '$dateStr  $timeStr  \u2022  ${_formatDuration(session.durationSeconds)}',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
                       color: BioVoltColors.textSecondary,
@@ -191,26 +205,28 @@ class _SessionListCard extends StatelessWidget {
     );
   }
 
-  String? _buildSummary() {
-    if (session.snapshots.length < 2) return null;
+  String? _buildSummary(SessionType? type) {
+    final computed = session.biometrics?.computed;
+    if (computed == null) return null;
 
-    return switch (session.type) {
-      SessionType.breathwork => _formatChange(
-          'HRV', session.metricChange((s) => s.hrv)),
-      SessionType.coldExposure => _formatChange(
-          'Temp', session.metricChange((s) => s.temperature)),
-      SessionType.meditation => _formatChange(
-          'GSR', session.metricChange((s) => s.gsr)),
-      SessionType.fastingCheck =>
-        'Avg HR ${session.avgMetric((s) => s.heartRate).toStringAsFixed(0)} BPM',
-      SessionType.grounding => _formatChange(
-          'GSR', session.metricChange((s) => s.gsr)),
+    return switch (type) {
+      SessionType.breathwork => computed.hrvRmssdMs != null
+          ? 'HRV ${computed.hrvRmssdMs!.toStringAsFixed(1)} ms avg'
+          : null,
+      SessionType.coldExposure => computed.heartRateMinBpm != null
+          ? 'Min HR ${computed.heartRateMinBpm!.toStringAsFixed(0)} BPM'
+          : null,
+      SessionType.meditation => computed.coherenceScore != null
+          ? 'Coherence ${computed.coherenceScore!.toStringAsFixed(0)} avg'
+          : null,
+      SessionType.fastingCheck => computed.heartRateMeanBpm != null
+          ? 'Avg HR ${computed.heartRateMeanBpm!.toStringAsFixed(0)} BPM'
+          : null,
+      SessionType.grounding => computed.lfHfProxy != null
+          ? 'LF/HF ${computed.lfHfProxy!.toStringAsFixed(2)}'
+          : null,
+      null => null,
     };
-  }
-
-  String _formatChange(String metric, double change) {
-    final sign = change >= 0 ? '+' : '';
-    return '$metric $sign${change.toStringAsFixed(1)}% during session';
   }
 }
 
@@ -221,17 +237,16 @@ class _SessionDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateTime =
-        DateTime.fromMillisecondsSinceEpoch(session.startTimeMs);
+    final dateTime = session.createdAt;
     final dateStr =
         '${dateTime.month}/${dateTime.day}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    final type = _sessionTypeFrom(session);
 
     return Scaffold(
       backgroundColor: BioVoltColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
               child: Row(
@@ -246,7 +261,7 @@ class _SessionDetailScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        session.type.displayName.toUpperCase(),
+                        (type?.displayName ?? 'Session').toUpperCase(),
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -255,7 +270,7 @@ class _SessionDetailScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '$dateStr  \u2022  ${session.durationFormatted}',
+                        '$dateStr  \u2022  ${_formatDuration(session.durationSeconds)}',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           color: BioVoltColors.textSecondary,
@@ -268,7 +283,7 @@ class _SessionDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: session.snapshots.isEmpty
+              child: session.biometrics?.computed == null
                   ? Center(
                       child: Text(
                         'No data recorded',
@@ -278,7 +293,7 @@ class _SessionDetailScreen extends StatelessWidget {
                         ),
                       ),
                     )
-                  : _buildCharts(),
+                  : _buildMetricsSummary(),
             ),
           ],
         ),
@@ -286,68 +301,104 @@ class _SessionDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCharts() {
+  Widget _buildMetricsSummary() {
+    final computed = session.biometrics!.computed!;
+    final esp32 = session.biometrics?.esp32;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          // Summary stats
-          _buildSummaryRow(),
-          const SizedBox(height: 20),
-          _buildChart(
-            'Heart Rate',
-            'BPM',
-            BioVoltColors.teal,
-            session.snapshots.map((s) => s.heartRate).toList(),
+          // Primary stats row
+          Row(
+            children: [
+              _summaryBox(
+                'Avg HR',
+                computed.heartRateMeanBpm != null
+                    ? '${computed.heartRateMeanBpm!.toStringAsFixed(0)} BPM'
+                    : '--',
+                BioVoltColors.teal,
+              ),
+              const SizedBox(width: 10),
+              _summaryBox(
+                'Avg HRV',
+                computed.hrvRmssdMs != null
+                    ? '${computed.hrvRmssdMs!.toStringAsFixed(1)} ms'
+                    : '--',
+                BioVoltColors.teal,
+              ),
+              const SizedBox(width: 10),
+              _summaryBox(
+                'Coherence',
+                computed.coherenceScore != null
+                    ? computed.coherenceScore!.toStringAsFixed(0)
+                    : '--',
+                BioVoltColors.teal,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildChart(
-            'HRV RMSSD',
-            'ms',
-            BioVoltColors.teal,
-            session.snapshots.map((s) => s.hrv).toList(),
+          const SizedBox(height: 12),
+          // Secondary stats row
+          Row(
+            children: [
+              _summaryBox(
+                'Min HR',
+                computed.heartRateMinBpm != null
+                    ? '${computed.heartRateMinBpm!.toStringAsFixed(0)} BPM'
+                    : '--',
+                BioVoltColors.teal,
+              ),
+              const SizedBox(width: 10),
+              _summaryBox(
+                'Max HR',
+                computed.heartRateMaxBpm != null
+                    ? '${computed.heartRateMaxBpm!.toStringAsFixed(0)} BPM'
+                    : '--',
+                BioVoltColors.amber,
+              ),
+              const SizedBox(width: 10),
+              _summaryBox(
+                'LF/HF',
+                computed.lfHfProxy != null
+                    ? computed.lfHfProxy!.toStringAsFixed(2)
+                    : '--',
+                BioVoltColors.amber,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildChart(
-            'GSR',
-            '\u00B5S',
-            BioVoltColors.amber,
-            session.snapshots.map((s) => s.gsr).toList(),
-          ),
-          const SizedBox(height: 16),
-          _buildChart(
-            'Temperature',
-            '\u00B0F',
-            BioVoltColors.coral,
-            session.snapshots.map((s) => s.temperature).toList(),
-          ),
+          if (esp32 != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _summaryBox(
+                  'Avg GSR',
+                  esp32.gsrMeanUs != null
+                      ? '${esp32.gsrMeanUs!.toStringAsFixed(2)} \u00B5S'
+                      : '--',
+                  BioVoltColors.amber,
+                ),
+                const SizedBox(width: 10),
+                _summaryBox(
+                  'Avg Temp',
+                  esp32.skinTempC != null
+                      ? '${esp32.skinTempC!.toStringAsFixed(1)} \u00B0C'
+                      : '--',
+                  BioVoltColors.coral,
+                ),
+                const SizedBox(width: 10),
+                _summaryBox(
+                  'SpO2',
+                  esp32.spo2Percent != null
+                      ? '${esp32.spo2Percent!.toStringAsFixed(0)}%'
+                      : '--',
+                  BioVoltColors.teal,
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 32),
         ],
       ),
-    );
-  }
-
-  Widget _buildSummaryRow() {
-    return Row(
-      children: [
-        _summaryBox(
-          'Avg HR',
-          '${session.avgMetric((s) => s.heartRate).toStringAsFixed(0)} BPM',
-          BioVoltColors.teal,
-        ),
-        const SizedBox(width: 10),
-        _summaryBox(
-          'Avg HRV',
-          '${session.avgMetric((s) => s.hrv).toStringAsFixed(1)} ms',
-          BioVoltColors.teal,
-        ),
-        const SizedBox(width: 10),
-        _summaryBox(
-          'Avg GSR',
-          '${session.avgMetric((s) => s.gsr).toStringAsFixed(2)} \u00B5S',
-          BioVoltColors.amber,
-        ),
-      ],
     );
   }
 
@@ -374,90 +425,6 @@ class _SessionDetailScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildChart(
-      String label, String unit, Color color, List<double> data) {
-    if (data.isEmpty) return const SizedBox.shrink();
-
-    final spots = data
-        .asMap()
-        .entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value))
-        .toList();
-
-    final minY = data.reduce((a, b) => a < b ? a : b);
-    final maxY = data.reduce((a, b) => a > b ? a : b);
-    final range = maxY - minY;
-    final padding = range == 0 ? 1.0 : range * 0.15;
-
-    return Container(
-      height: 160,
-      padding: const EdgeInsets.all(14),
-      decoration: BioVoltTheme.glassCard(glowColor: color),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                unit,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9,
-                  color: BioVoltColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: range == 0 ? 1 : range / 3,
-                  getDrawingHorizontalLine: (_) => FlLine(
-                    color: BioVoltColors.gridLine,
-                    strokeWidth: 0.5,
-                  ),
-                ),
-                titlesData: const FlTitlesData(show: false),
-                borderData: FlBorderData(show: false),
-                minY: minY - padding,
-                maxY: maxY + padding,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    curveSmoothness: 0.3,
-                    color: color,
-                    barWidth: 2,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: color.withAlpha(20),
-                    ),
-                  ),
-                ],
-                lineTouchData: const LineTouchData(enabled: false),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

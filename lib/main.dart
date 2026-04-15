@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
+import 'connectors/connector_esp32.dart';
+import 'connectors/connector_registry.dart';
+import 'services/ble_service.dart';
 import 'services/session_storage.dart';
+import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +21,18 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  final sessionStorage = SessionStorage();
-  await sessionStorage.init();
+  final storageService = StorageService();
+  await storageService.init();
 
-  runApp(BioVoltApp(sessionStorage: sessionStorage));
+  final sessionStorage = SessionStorage(storageService);
+
+  // Create BleService and register ESP32 connector
+  final bleService = BleService();
+  final registry = ConnectorRegistry.instance;
+  registry.register(Esp32Connector(bleService: bleService));
+
+  runApp(BioVoltApp(
+    sessionStorage: sessionStorage,
+    bleService: bleService,
+  ));
 }

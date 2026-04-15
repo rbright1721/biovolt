@@ -7,7 +7,7 @@ import '../bloc/sensors/sensors_event.dart';
 import '../bloc/sensors/sensors_state.dart';
 import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_event.dart';
-import '../models/session.dart';
+import '../models/session_type.dart';
 import '../widgets/pattern_selector.dart';
 import '../config/theme.dart';
 import '../services/ble_service.dart';
@@ -284,7 +284,7 @@ class DashboardScreen extends StatelessWidget {
         ),
         SignalCard(
           label: 'GSR',
-          unit: 'µS',
+          unit: '\u00B5S',
           valueStream: bleService.gsrStream,
           accentColor: BioVoltColors.amber,
           formatValue: (v) => v.toStringAsFixed(2),
@@ -299,7 +299,7 @@ class DashboardScreen extends StatelessWidget {
         ),
         SignalCard(
           label: 'Temperature',
-          unit: '°F',
+          unit: '\u00B0F',
           valueStream: bleService.temperatureStream,
           accentColor: BioVoltColors.coral,
           formatValue: (v) => v.toStringAsFixed(1),

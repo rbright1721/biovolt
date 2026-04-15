@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
-import '../models/session.dart';
+import '../models/session_type.dart';
 import '../models/signal_info.dart';
 
 /// Collapsible guidance panel shown during active sessions.

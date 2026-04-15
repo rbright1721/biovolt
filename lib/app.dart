@@ -15,25 +15,22 @@ import 'services/session_storage.dart';
 
 class BioVoltApp extends StatefulWidget {
   final SessionStorage sessionStorage;
+  final BleService bleService;
 
-  const BioVoltApp({super.key, required this.sessionStorage});
+  const BioVoltApp({
+    super.key,
+    required this.sessionStorage,
+    required this.bleService,
+  });
 
   @override
   State<BioVoltApp> createState() => _BioVoltAppState();
 }
 
 class _BioVoltAppState extends State<BioVoltApp> {
-  late final BleService _bleService;
-
-  @override
-  void initState() {
-    super.initState();
-    _bleService = BleService();
-  }
-
   @override
   void dispose() {
-    _bleService.dispose();
+    widget.bleService.dispose();
     super.dispose();
   }
 
@@ -43,7 +40,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
       providers: [
         BlocProvider(
           create: (_) {
-            final bloc = SensorsBloc(bleService: _bleService);
+            final bloc = SensorsBloc(bleService: widget.bleService);
             bloc.add(SensorsStarted());
             return bloc;
           },
@@ -63,7 +60,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
-        home: _MainShell(bleService: _bleService),
+        home: _MainShell(bleService: widget.bleService),
       ),
     );
   }

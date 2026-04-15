@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
-import 'session.dart';
+import 'session_type.dart';
 
 /// A numeric range with a label and color for visual display.
 class SignalRange {

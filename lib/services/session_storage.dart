@@ -1,36 +1,22 @@
-import 'package:hive_flutter/hive_flutter.dart';
 import '../models/session.dart';
+import 'storage_service.dart';
 
+/// Thin wrapper around [StorageService] for session operations.
+///
+/// Preserves the existing interface used by [SessionBloc] and [BioVoltApp]
+/// while delegating all persistence to the unified [StorageService].
 class SessionStorage {
-  static const _boxName = 'sessions';
-  Box<Session>? _box;
+  final StorageService _storage;
 
-  Future<void> init() async {
-    await Hive.initFlutter();
-    Hive.registerAdapter(SessionTypeAdapter());
-    Hive.registerAdapter(SensorSnapshotAdapter());
-    Hive.registerAdapter(SessionAdapter());
-    _box = await Hive.openBox<Session>(_boxName);
-  }
+  SessionStorage(this._storage);
 
-  Future<void> saveSession(Session session) async {
-    await _box?.put(session.id, session);
-  }
+  Future<void> saveSession(Session session) => _storage.saveSession(session);
 
-  List<Session> getAllSessions() {
-    if (_box == null) return [];
-    final sessions = _box!.values.toList();
-    sessions.sort((a, b) => b.startTimeMs.compareTo(a.startTimeMs));
-    return sessions;
-  }
+  List<Session> getAllSessions() => _storage.getAllSessions();
 
-  Session? getSession(String id) => _box?.get(id);
+  Session? getSession(String id) => _storage.getSession(id);
 
-  Future<void> deleteSession(String id) async {
-    await _box?.delete(id);
-  }
+  Future<void> deleteSession(String id) => _storage.deleteSession(id);
 
-  Future<void> clear() async {
-    await _box?.clear();
-  }
+  Future<void> clear() => _storage.clearAll();
 }

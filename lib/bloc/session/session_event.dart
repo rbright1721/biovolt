@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
-import '../../models/session.dart';
+import '../../models/sensor_snapshot.dart';
+import '../../models/session_type.dart';
 
 abstract class SessionEvent extends Equatable {
   @override
