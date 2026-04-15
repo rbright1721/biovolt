@@ -479,7 +479,7 @@ class BleService {
       _ecgHpInit = true;
       ecgHp = 0;
     } else {
-      ecgHp = 0.94 * (_ecgHpPrevOut + rawEcg - _ecgHpPrevIn);
+      ecgHp = 0.97 * (_ecgHpPrevOut + rawEcg - _ecgHpPrevIn);
       _ecgHpPrevIn  = rawEcg;
       _ecgHpPrevOut = ecgHp;
     }
@@ -573,10 +573,9 @@ class BleService {
       final peakAmp = _ecgPeakHistory.last;
 
       // ── Slope-based T-wave rejection ──────────────────────────────────
-      // T-waves have broad, gentle slopes vs the sharp R-peak spike.
-      // If within 400ms (20 samples) of last R-peak AND max slope < 40%
-      // of last R-peak's slope → T-wave, discard.
-      final isTWave = _ecgSamplesSinceRPeak < 20 &&
+      // Universal slope gate: every peak must have slope >= 40% of last
+      // confirmed R-peak. Real R-peaks have slopes >900, false positives 200-450.
+      final isTWave = _ecgLastRPeakSlope > 0 &&
           _ecgMaxSlopeInWindow < _ecgLastRPeakSlope * 0.4;
 
       if (isTWave) {
@@ -615,17 +614,30 @@ class BleService {
 
         if (_ecgLastPeakTimeMs != null) {
           final rrMs = (refinedTimeMs - _ecgLastPeakTimeMs!).round();
-          if (rrMs >= _ecgRefractorySamples * _msPerSample &&
-              rrMs <= _ecgMaxGapSamples * _msPerSample) {
-            _ecgRrIntervals.add(rrMs);
-            if (_ecgRrIntervals.length > 15) _ecgRrIntervals.removeAt(0);
+          final withinBounds = rrMs >= _ecgRefractorySamples * _msPerSample &&
+              rrMs <= _ecgMaxGapSamples * _msPerSample;
+          // Reject RR intervals that are >30% shorter than running average.
+          // The heart cannot accelerate by more than 30% in a single beat.
+          // Only apply this check once we have enough data to trust the average.
+          final consistentWithAvg = _ecgRrIntervals.length < 4 ||
+              rrMs > _ecgAvgRr * 0.7;
 
-            _ecgAvgRr = _ecgRrIntervals.reduce((a, b) => a + b) /
-                _ecgRrIntervals.length;
+          if (withinBounds) {
+            // Always update timing anchor for peaks within physiological
+            // bounds. This peak IS a real heartbeat — we just may not
+            // trust this particular interval measurement.
+            _ecgLastPeakTimeMs = refinedTimeMs;
+
+            if (consistentWithAvg) {
+              _ecgRrIntervals.add(rrMs);
+              if (_ecgRrIntervals.length > 15) _ecgRrIntervals.removeAt(0);
+              _ecgAvgRr = _ecgRrIntervals.reduce((a, b) => a + b) /
+                  _ecgRrIntervals.length;
+            }
           }
+        } else {
+          _ecgLastPeakTimeMs = refinedTimeMs;
         }
-
-        _ecgLastPeakTimeMs = refinedTimeMs;
         _ecgRefractoryCount = _ecgRefractorySamples;
       }
     } else {
