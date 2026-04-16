@@ -7,6 +7,7 @@ import '../services/ble_service.dart';
 import '../services/context_inferrer.dart';
 import '../services/storage_service.dart';
 import 'confirm_context_screen.dart';
+import 'new_template_screen.dart';
 import 'settings_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -127,6 +128,8 @@ class _TemplateLauncherScreenState extends State<TemplateLauncherScreen> {
             _sectionLabel('NEW SESSION'),
             const SizedBox(height: 10),
             _buildActivityGrid(),
+            const SizedBox(height: 16),
+            _buildNewTemplateButton(),
             const SizedBox(height: 40),
           ],
         ),
@@ -492,6 +495,55 @@ class _TemplateLauncherScreenState extends State<TemplateLauncherScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. New template button
+  // -------------------------------------------------------------------------
+
+  Widget _buildNewTemplateButton() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context)
+            .push(
+          MaterialPageRoute(
+            builder: (_) =>
+                NewTemplateScreen(bleService: widget.bleService),
+          ),
+        )
+            .then((_) {
+          _loadTemplates();
+        });
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: BioVoltColors.teal.withAlpha(15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: BioVoltColors.teal.withAlpha(80), width: 1.5),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add_rounded,
+                color: BioVoltColors.teal, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              'NEW TEMPLATE',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: BioVoltColors.teal,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

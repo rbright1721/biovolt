@@ -185,6 +185,13 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
       }
     }
 
+    // Active protocols for coach context
+    final protocols = _storage.getAllActiveProtocols();
+    if (protocols.isNotEmpty) {
+      buf.writeln('Active protocols: ${protocols.map((p) =>
+          '${p.name} day ${p.currentCycleDay}/${p.cycleLengthDays}').join(', ')}');
+    }
+
     return buf.toString();
   }
 
@@ -468,9 +475,6 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
   }
 
   void _writeInterventions(StringBuffer buf, Session session) {
-    // The session model has no direct interventions field yet —
-    // it would come from a linked Interventions record. For now, note
-    // the session context if available.
     final ctx = session.context;
     if (ctx != null) {
       if (ctx.fastingHours != null) {
@@ -488,7 +492,21 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
       if (ctx.notes != null) {
         buf.writeln('Notes: ${ctx.notes}');
       }
-    } else {
+    }
+
+    // Active peptide/supplement protocols
+    final protocols = _storage.getAllActiveProtocols();
+    if (protocols.isNotEmpty) {
+      buf.writeln('Active protocols:');
+      for (final p in protocols) {
+        final dose = p.doseMcg > 0
+            ? ' ${p.doseMcg.toStringAsFixed(0)}mcg'
+            : '';
+        buf.writeln(
+          '  ${p.name}$dose ${p.route} \u2014 day ${p.currentCycleDay} of ${p.cycleLengthDays}'
+        );
+      }
+    } else if (ctx == null) {
       buf.writeln('No protocol context recorded for this session.');
     }
   }

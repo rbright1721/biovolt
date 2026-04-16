@@ -37,15 +37,11 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
   bool _isListening = false;
   String _voiceTranscript = '';
 
-  bool _hasKey = false;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    AiService().hasValidKey().then((v) {
-      if (mounted) setState(() => _hasKey = v);
-    });
     _speech.initialize().then((available) {
       if (mounted) setState(() => _speechAvailable = available);
     });
@@ -504,55 +500,33 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildAiSection() {
-    if (_hasKey) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BioVoltTheme.glassCard(glowColor: BioVoltColors.teal),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.auto_awesome_rounded,
-                    size: 16, color: BioVoltColors.teal),
-                const SizedBox(width: 8),
-                Text('AI Coach Analysis',
-                    style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: BioVoltColors.teal)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your API key is configured. Analysis will run in the background '
-              'using your full biological context.',
-              style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: BioVoltColors.textSecondary,
-                  height: 1.5),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BioVoltTheme.glassCard(glowColor: BioVoltColors.surface),
+      decoration: BioVoltTheme.glassCard(glowColor: BioVoltColors.teal),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.vpn_key_rounded,
-              size: 20, color: BioVoltColors.textSecondary),
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded,
+                  size: 16, color: BioVoltColors.teal),
+              const SizedBox(width: 8),
+              Text('AI Coach Analysis',
+                  style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: BioVoltColors.teal)),
+            ],
+          ),
           const SizedBox(height: 8),
-          Text('Add API Key for AI Analysis',
-              style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11, color: BioVoltColors.textSecondary)),
-          const SizedBox(height: 4),
-          Text('Connect Claude or OpenAI in Settings',
-              style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: BioVoltColors.textSecondary.withAlpha(120))),
+          Text(
+            'Analysis will run in the background '
+            'using your full biological context.',
+            style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: BioVoltColors.textSecondary,
+                height: 1.5),
+          ),
         ],
       ),
     );
@@ -656,8 +630,8 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
     final storage = StorageService();
     await storage.saveSession(updatedSession);
 
-    // Trigger AI analysis in background if requested and key available
-    if (analyze && _hasKey) {
+    // Trigger AI analysis in background if requested
+    if (analyze) {
       final aiService = AiService();
       final promptBuilder = PromptBuilder(storage: storage);
       final prompt =

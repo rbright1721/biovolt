@@ -1,5 +1,3 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import 'ai_service.dart';
 
 /// Current AI configuration state.
@@ -10,83 +8,35 @@ class AiConfig {
   final bool keyTested;
 
   const AiConfig({
-    this.provider,
-    this.model,
-    this.hasKey = false,
-    this.keyTested = false,
+    this.provider = 'anthropic',
+    this.model = 'claude-sonnet-4-5',
+    this.hasKey = true,
+    this.keyTested = true,
   });
 }
 
-/// Service for managing AI provider settings in the UI.
+/// Service for managing AI provider settings.
+/// With the Firebase proxy, keys are managed server-side.
 class AiConfigService {
   final AiService _aiService;
-  final FlutterSecureStorage _secureStorage;
 
-  bool _keyTested = false;
-
-  AiConfigService({
-    required AiService aiService,
-    FlutterSecureStorage? secureStorage,
-  })  : _aiService = aiService,
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  AiConfigService({required AiService aiService}) : _aiService = aiService;
 
   /// Returns the current AI configuration.
   Future<AiConfig> getConfig() async {
     final provider = await _aiService.getProvider();
-    final hasKey = await _aiService.hasValidKey();
-
-    String? model;
-    if (provider == 'anthropic') {
-      model = 'claude-sonnet-4-6';
-    } else if (provider == 'openai') {
-      model = 'gpt-4o';
-    }
-
-    return AiConfig(
-      provider: provider,
-      model: model,
-      hasKey: hasKey,
-      keyTested: _keyTested,
-    );
+    return AiConfig(provider: provider);
   }
 
-  /// Set the AI provider ('anthropic' or 'openai').
-  Future<void> setProvider(String provider) async {
-    await _secureStorage.write(key: 'ai_provider', value: provider);
-    _keyTested = false;
-  }
+  /// No-op — provider is fixed to 'anthropic' via the proxy.
+  Future<void> setProvider(String provider) async {}
 
-  /// Set the API key — validates format via [AiService.saveApiKey].
-  Future<void> setApiKey(String key) async {
-    final provider = await _aiService.getProvider() ?? 'anthropic';
-    await _aiService.saveApiKey(provider, key);
-    _keyTested = false;
-  }
+  /// No-op — keys are managed server-side.
+  Future<void> setApiKey(String key) async {}
 
-  /// Clear the stored API key.
-  Future<void> clearKey() async {
-    await _aiService.clearKey();
-    _keyTested = false;
-  }
+  /// No-op — keys are managed server-side.
+  Future<void> clearKey() async {}
 
-  /// Make a minimal API call to verify the stored key works.
-  ///
-  /// Sends "Say OK" with max_tokens=5. Returns true if the API responds
-  /// with a 200 status.
-  Future<bool> testKey() async {
-    try {
-      final result = await _aiService.quickCoach(
-        'Say OK',
-        systemPrompt: 'Respond with only the word OK.',
-      );
-      _keyTested = result.isNotEmpty;
-      return _keyTested;
-    } on AiAuthException {
-      _keyTested = false;
-      return false;
-    } catch (_) {
-      _keyTested = false;
-      return false;
-    }
-  }
+  /// Always returns true — the proxy manages keys.
+  Future<bool> testKey() async => true;
 }

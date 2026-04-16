@@ -76,6 +76,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     _buildAnalysisSection(),
                     const SizedBox(height: 20),
                     _buildSubjectiveSection(),
+                    const SizedBox(height: 20),
+                    _buildNotesSection(),
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -613,6 +615,84 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 ),
               ))
           .toList(),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session notes (notable effects + side effects)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildNotesSection() {
+    final post = widget.session.subjective?.postSession;
+    final hasNotes = (post?.notableEffects != null &&
+            post!.notableEffects!.isNotEmpty) ||
+        (post?.sideEffects != null && post!.sideEffects!.isNotEmpty);
+
+    if (!hasNotes) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('SESSION NOTES'),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BioVoltTheme.glassCard(glowColor: BioVoltColors.surface),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (post.notableEffects != null &&
+                  post.notableEffects!.isNotEmpty) ...[
+                Text(
+                  'Notable effects',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: BioVoltColors.textSecondary,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  post.notableEffects!,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    color: BioVoltColors.textPrimary,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+              if (post.notableEffects != null &&
+                  post.notableEffects!.isNotEmpty &&
+                  post.sideEffects != null &&
+                  post.sideEffects!.isNotEmpty)
+                const SizedBox(height: 12),
+              if (post.sideEffects != null &&
+                  post.sideEffects!.isNotEmpty) ...[
+                Text(
+                  'Side effects',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: BioVoltColors.textSecondary,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  post.sideEffects!,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    color: BioVoltColors.textPrimary,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 

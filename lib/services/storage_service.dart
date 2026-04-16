@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,7 @@ import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/sleep_record.dart';
 import '../models/active_protocol.dart';
+import '../models/vitals_bookmark.dart';
 import '../models/session_template.dart';
 import '../models/user_profile.dart';
 
@@ -31,6 +33,7 @@ class StorageService {
   Box<Bloodwork>? _bloodworkBox;
   Box<SessionTemplate>? _sessionTemplatesBox;
   Box<ActiveProtocol>? _activeProtocolsBox;
+  Box<String>? _bookmarksBox;
 
   // Bump this whenever TypeAdapter IDs or model shapes change.
   // Forces a full Hive wipe on devices with stale data.
@@ -110,6 +113,7 @@ class StorageService {
           await Hive.openBox<SessionTemplate>('session_templates');
       _activeProtocolsBox =
           await Hive.openBox<ActiveProtocol>('active_protocols');
+      _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
     } catch (e) {
       // Nuclear option — if boxes are corrupt, wipe everything and retry
       debugPrint('Hive box open failed: $e \u2014 nuking all data');
@@ -133,6 +137,7 @@ class StorageService {
           await Hive.openBox<SessionTemplate>('session_templates');
       _activeProtocolsBox =
           await Hive.openBox<ActiveProtocol>('active_protocols');
+      _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_schemaKey, _schemaVersion);
@@ -386,6 +391,7 @@ class StorageService {
     await _bloodworkBox?.clear();
     await _sessionTemplatesBox?.clear();
     await _activeProtocolsBox?.clear();
+    await _bookmarksBox?.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -476,5 +482,30 @@ class StorageService {
 
   Future<void> deleteActiveProtocol(String id) async {
     await _activeProtocolsBox?.delete(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vitals Bookmarks
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveBookmark(VitalsBookmark bookmark) async {
+    final json = jsonEncode(bookmark.toJson());
+    await _bookmarksBox?.put(bookmark.id, json);
+  }
+
+  List<VitalsBookmark> getAllBookmarks() {
+    if (_bookmarksBox == null) return [];
+    return _bookmarksBox!.values
+        .map((s) => VitalsBookmark.fromJson(
+            jsonDecode(s) as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  List<VitalsBookmark> getBookmarksInRange(DateTime from, DateTime to) {
+    return getAllBookmarks()
+        .where(
+            (b) => !b.timestamp.isBefore(from) && !b.timestamp.isAfter(to))
+        .toList();
   }
 }

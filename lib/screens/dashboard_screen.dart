@@ -6,8 +6,10 @@ import '../bloc/sensors/sensors_bloc.dart';
 import '../bloc/sensors/sensors_event.dart';
 import '../bloc/sensors/sensors_state.dart';
 import '../config/theme.dart';
-import '../services/ble_service.dart';
 import '../models/signal_info.dart';
+import '../models/vitals_bookmark.dart';
+import '../services/ble_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_info_sheet.dart';
@@ -15,8 +17,9 @@ import 'template_launcher_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   final BleService bleService;
+  final StorageService _storage = StorageService();
 
-  const DashboardScreen({super.key, required this.bleService});
+  DashboardScreen({super.key, required this.bleService});
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +29,7 @@ class DashboardScreen extends StatelessWidget {
         child: Column(
           children: [
             _buildTopBar(context),
+            _buildBookmarkButton(context),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -306,6 +310,283 @@ class DashboardScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+  // -------------------------------------------------------------------------
+  // Vitals bookmark
+  // -------------------------------------------------------------------------
+
+  Widget _buildBookmarkButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showBookmarkSheet(context),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: BioVoltColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: BioVoltColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.bookmark_add_rounded,
+                size: 14, color: BioVoltColors.textSecondary),
+            const SizedBox(width: 8),
+            Text(
+              'Quick vitals bookmark',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: BioVoltColors.textSecondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              'TAP \u2192',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: BioVoltColors.textSecondary,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBookmarkSheet(BuildContext context) {
+    final state = context.read<SensorsBloc>().state;
+
+    final currentHr = state.heartRate;
+    final currentHrv = state.hrv;
+    final currentGsr = state.gsr;
+    final currentTemp = state.temperature;
+    final currentSpo2 = state.spo2;
+
+    final noteCtrl = TextEditingController();
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          decoration: const BoxDecoration(
+            color: BioVoltColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.cardBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Title
+              Text(
+                'VITALS BOOKMARK',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: BioVoltColors.teal,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatBookmarkTime(DateTime.now()),
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: BioVoltColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Vitals snapshot chips
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  if (currentHr > 0)
+                    _snapshotChip(
+                        'HR', '${currentHr.toStringAsFixed(0)} bpm'),
+                  if (currentHrv > 0)
+                    _snapshotChip(
+                        'HRV', '${currentHrv.toStringAsFixed(0)} ms'),
+                  if (currentGsr > 0)
+                    _snapshotChip(
+                        'GSR', '${currentGsr.toStringAsFixed(1)} \u00B5S'),
+                  if (currentSpo2 > 0)
+                    _snapshotChip(
+                        'SpO2', '${currentSpo2.toStringAsFixed(0)}%'),
+                  if (currentTemp > 0)
+                    _snapshotChip(
+                        'Temp', '${currentTemp.toStringAsFixed(1)}\u00B0F'),
+                  if (currentHr == 0)
+                    _snapshotChip('Sensor', 'No live data'),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Note field
+              TextField(
+                controller: noteCtrl,
+                autofocus: true,
+                maxLines: 3,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  color: BioVoltColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'What are you noticing? '
+                      '(optional \u2014 bookmark saves without a note)',
+                  hintStyle: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: BioVoltColors.textSecondary,
+                  ),
+                  filled: true,
+                  fillColor: BioVoltColors.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: BioVoltColors.cardBorder),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: BioVoltColors.cardBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: BioVoltColors.teal),
+                  ),
+                  contentPadding: const EdgeInsets.all(10),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Save button
+              GestureDetector(
+                onTap: saving
+                    ? null
+                    : () async {
+                        setSheetState(() => saving = true);
+                        final now = DateTime.now();
+                        final bookmark = VitalsBookmark(
+                          id: now.millisecondsSinceEpoch.toString(),
+                          timestamp: now,
+                          note: noteCtrl.text.trim().isEmpty
+                              ? null
+                              : noteCtrl.text.trim(),
+                          hrBpm: currentHr > 0 ? currentHr : null,
+                          hrvMs: currentHrv > 0 ? currentHrv : null,
+                          gsrUs: currentGsr > 0 ? currentGsr : null,
+                          skinTempF: currentTemp > 0 ? currentTemp : null,
+                          spo2Percent:
+                              currentSpo2 > 0 ? currentSpo2 : null,
+                        );
+                        await _storage.saveBookmark(bookmark);
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Bookmark saved \u2014 ${_formatBookmarkTime(now)}',
+                                style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11),
+                              ),
+                              backgroundColor: BioVoltColors.surface,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.teal.withAlpha(20),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: BioVoltColors.teal.withAlpha(120), width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: BioVoltColors.teal))
+                      : Text(
+                          'SAVE BOOKMARK \u2192',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: BioVoltColors.teal,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _snapshotChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: BioVoltColors.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$label  ',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: BioVoltColors.textSecondary,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: BioVoltColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatBookmarkTime(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final period = t.hour < 12 ? 'am' : 'pm';
+    final min = t.minute.toString().padLeft(2, '0');
+    return '${t.month}/${t.day}  $h:$min $period';
   }
 }
 

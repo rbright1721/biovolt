@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
@@ -27,6 +28,8 @@ void main() async {
     systemNavigationBarColor: Color(0xFF0A0E17),
     systemNavigationBarIconBrightness: Brightness.light,
   ));
+
+  await Firebase.initializeApp();
 
   final storageService = StorageService();
   await storageService.init();

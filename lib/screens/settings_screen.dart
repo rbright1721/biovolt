@@ -5,8 +5,6 @@ import '../connectors/connector_base.dart';
 import '../connectors/connector_oura.dart';
 import '../connectors/connector_registry.dart';
 import '../models/normalized_record.dart';
-import '../services/ai_config_service.dart';
-import '../services/ai_service.dart';
 import '../services/oura_sync_service.dart';
 import '../services/storage_service.dart';
 import 'profile_screen.dart';
@@ -19,16 +17,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final AiService _aiService;
-  late final AiConfigService _aiConfigService;
   late final StorageService _storage;
-
-  // AI config state
-  AiConfig _aiConfig = const AiConfig();
-  final _keyController = TextEditingController();
-  bool _keyObscured = true;
-  bool _testing = false;
-  String? _keyError;
 
   // Data stats
   int _sessionCount = 0;
@@ -38,16 +27,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _aiService = AiService();
-    _aiConfigService = AiConfigService(aiService: _aiService);
     _storage = StorageService();
-    _loadConfig();
     _loadStats();
-  }
-
-  Future<void> _loadConfig() async {
-    final config = await _aiConfigService.getConfig();
-    if (mounted) setState(() => _aiConfig = config);
   }
 
   void _loadStats() {
@@ -80,7 +61,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _keyController.dispose();
     super.dispose();
   }
 
@@ -197,199 +177,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildAiSection() {
     return _Section(
-      title: 'AI CONFIGURATION',
-      children: [
-        // Provider toggle
-        _label('AI Provider'),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            _ProviderChip(
-              label: 'Claude (Anthropic)',
-              selected: _aiConfig.provider == 'anthropic' ||
-                  _aiConfig.provider == null,
-              onTap: () async {
-                await _aiConfigService.setProvider('anthropic');
-                _loadConfig();
-              },
-            ),
-            const SizedBox(width: 8),
-            _ProviderChip(
-              label: 'ChatGPT (OpenAI)',
-              selected: _aiConfig.provider == 'openai',
-              onTap: () async {
-                await _aiConfigService.setProvider('openai');
-                _loadConfig();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // API Key field
-        _label('API Key'),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _keyController,
-          obscureText: _keyObscured,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12,
-            color: BioVoltColors.textPrimary,
-          ),
-          decoration: InputDecoration(
-            hintText: _aiConfig.provider == 'openai'
-                ? 'sk-...'
-                : 'sk-ant-...',
-            hintStyle: GoogleFonts.jetBrainsMono(
-              fontSize: 12,
-              color: BioVoltColors.textSecondary.withAlpha(80),
-            ),
-            filled: true,
-            fillColor: BioVoltColors.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: BioVoltColors.cardBorder),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: BioVoltColors.cardBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: BioVoltColors.teal),
-            ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _keyObscured
-                    ? Icons.visibility_off_rounded
-                    : Icons.visibility_rounded,
-                size: 18,
-                color: BioVoltColors.textSecondary,
-              ),
-              onPressed: () =>
-                  setState(() => _keyObscured = !_keyObscured),
-            ),
-            errorText: _keyError,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            _ActionButton(
-              label: 'TEST KEY',
-              color: BioVoltColors.amber,
-              onTap: _aiConfig.hasKey ? _testKey : null,
-            ),
-            const SizedBox(width: 8),
-            _ActionButton(
-              label: 'SAVE',
-              color: BioVoltColors.teal,
-              onTap: _saveKey,
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Status indicator
-        _buildKeyStatus(),
-        const SizedBox(height: 12),
-
-        // Help text
-        _ExpandableHelp(),
-      ],
-    );
-  }
-
-  Widget _buildKeyStatus() {
-    Color dotColor;
-    String statusText;
-
-    if (_testing) {
-      return Row(
-        children: [
-          SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: BioVoltColors.amber,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Testing...',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              color: BioVoltColors.amber,
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (_aiConfig.hasKey && _aiConfig.keyTested) {
-      dotColor = BioVoltColors.teal;
-      statusText = 'Key valid and tested';
-    } else if (_aiConfig.hasKey) {
-      dotColor = BioVoltColors.amber;
-      statusText = 'Key saved, not tested';
-    } else {
-      dotColor = BioVoltColors.coral;
-      statusText = 'No key configured';
-    }
-
-    return Row(
+      title: 'AI ANALYSIS',
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: dotColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: dotColor.withAlpha(100), blurRadius: 6),
+            color: BioVoltColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: BioVoltColors.cardBorder),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded,
+                  size: 18, color: BioVoltColors.teal),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI analysis powered by Claude',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: BioVoltColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'No API key required.',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: BioVoltColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: BioVoltColors.teal,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                        color: BioVoltColors.teal.withAlpha(100),
+                        blurRadius: 6),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          statusText,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 11,
-            color: dotColor,
-          ),
-        ),
       ],
     );
-  }
-
-  Future<void> _saveKey() async {
-    final key = _keyController.text.trim();
-    if (key.isEmpty) return;
-
-    try {
-      await _aiConfigService.setApiKey(key);
-      setState(() => _keyError = null);
-      await _loadConfig();
-      // Auto-test after save
-      await _testKey();
-    } on AiAuthException catch (e) {
-      setState(() => _keyError = e.message);
-    }
-  }
-
-  Future<void> _testKey() async {
-    setState(() => _testing = true);
-    final success = await _aiConfigService.testKey();
-    await _loadConfig();
-    if (mounted) {
-      setState(() {
-        _testing = false;
-        if (!success) _keyError = 'Key test failed — check key and try again';
-      });
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -734,18 +577,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  Widget _label(String text) {
-    return Text(
-      text.toUpperCase(),
-      style: GoogleFonts.jetBrainsMono(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: BioVoltColors.textSecondary,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-
   String _formatTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'just now';
@@ -786,48 +617,6 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _ProviderChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ProviderChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? BioVoltColors.teal.withAlpha(20)
-              : BioVoltColors.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected
-                ? BioVoltColors.teal.withAlpha(100)
-                : BioVoltColors.cardBorder,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color:
-                selected ? BioVoltColors.teal : BioVoltColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ActionButton extends StatelessWidget {
   final String label;
   final Color color;
@@ -863,75 +652,6 @@ class _ActionButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ExpandableHelp extends StatefulWidget {
-  @override
-  State<_ExpandableHelp> createState() => _ExpandableHelpState();
-}
-
-class _ExpandableHelpState extends State<_ExpandableHelp> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Row(
-            children: [
-              Icon(
-                Icons.help_outline_rounded,
-                size: 14,
-                color: BioVoltColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'How API keys work',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: BioVoltColors.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                _expanded
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: BioVoltColors.textSecondary,
-              ),
-            ],
-          ),
-        ),
-        if (_expanded) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: BioVoltColors.surface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: BioVoltColors.cardBorder),
-            ),
-            child: Text(
-              'Your key is stored only on this device using Android Keystore. '
-              'It is never sent to BioVolt servers. API calls go directly from '
-              'your device to Anthropic/OpenAI.\n\n'
-              'Get a Claude key: console.anthropic.com\n'
-              'Get an OpenAI key: platform.openai.com',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                color: BioVoltColors.textSecondary,
-                height: 1.6,
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 }

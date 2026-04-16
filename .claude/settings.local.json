@@ -12,7 +12,10 @@
       "Bash(grep -E \"\\\\.\\(dart|swift|kt\\)$\")",
       "Bash(xargs grep:*)",
       "Bash(ls *)",
-      "Bash(find *)"
+      "Bash(find *)",
+      "Bash(where firebase *)",
+      "Bash(firebase projects:list)",
+      "Bash(npm install *)"
     ]
   }
 }

@@ -24,6 +24,8 @@ dependencies:
   polar: ^7.10.0
   shared_preferences: ^2.5.5
   speech_to_text: ^6.6.0
+  firebase_core: ^3.8.1
+  cloud_functions: ^5.2.1
 
 dev_dependencies:
   flutter_test:
