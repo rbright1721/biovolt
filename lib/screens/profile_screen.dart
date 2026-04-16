@@ -566,6 +566,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       mthfr: _mthfr == 'Unknown' ? null : _mthfr,
       apoe: _apoe == 'Unknown' ? null : _apoe,
       comt: _comt == 'Unknown' ? null : _comt,
+      fastingType: existing?.fastingType,
+      eatWindowStartHour: existing?.eatWindowStartHour,
+      eatWindowEndHour: existing?.eatWindowEndHour,
+      lastMealTime: existing?.lastMealTime,
     );
 
     await _storage.saveUserProfile(profile);

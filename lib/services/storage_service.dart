@@ -12,6 +12,7 @@ import '../models/sensor_snapshot.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/sleep_record.dart';
+import '../models/active_protocol.dart';
 import '../models/session_template.dart';
 import '../models/user_profile.dart';
 
@@ -29,6 +30,7 @@ class StorageService {
   Box? _biometricRecordsBox;
   Box<Bloodwork>? _bloodworkBox;
   Box<SessionTemplate>? _sessionTemplatesBox;
+  Box<ActiveProtocol>? _activeProtocolsBox;
 
   // Bump this whenever TypeAdapter IDs or model shapes change.
   // Forces a full Hive wipe on devices with stale data.
@@ -45,6 +47,7 @@ class StorageService {
     'biometric_records',
     'bloodwork',
     'session_templates',
+    'active_protocols',
   ];
 
   bool _initialized = false;
@@ -105,6 +108,8 @@ class StorageService {
       _bloodworkBox = await Hive.openBox<Bloodwork>('bloodwork');
       _sessionTemplatesBox =
           await Hive.openBox<SessionTemplate>('session_templates');
+      _activeProtocolsBox =
+          await Hive.openBox<ActiveProtocol>('active_protocols');
     } catch (e) {
       // Nuclear option — if boxes are corrupt, wipe everything and retry
       debugPrint('Hive box open failed: $e \u2014 nuking all data');
@@ -126,6 +131,8 @@ class StorageService {
       _bloodworkBox = await Hive.openBox<Bloodwork>('bloodwork');
       _sessionTemplatesBox =
           await Hive.openBox<SessionTemplate>('session_templates');
+      _activeProtocolsBox =
+          await Hive.openBox<ActiveProtocol>('active_protocols');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_schemaKey, _schemaVersion);
@@ -190,6 +197,9 @@ class StorageService {
 
     // -- Session templates: ID 40 --
     Hive.registerAdapter(SessionTemplateAdapter());  // 40
+
+    // -- Active protocols: ID 41 --
+    Hive.registerAdapter(ActiveProtocolAdapter());   // 41
   }
 
   /// In debug mode, verify that all registered adapters have unique typeIds.
@@ -210,7 +220,7 @@ class StorageService {
       (28, 'SupplementLog'), (29, 'NutritionLog'), (30, 'HydrationLog'),
       (31, 'UserProfile'), (32, 'ConnectorState'),
       (33, 'SessionType'), (34, 'SensorSnapshot'), (35, 'Bloodwork'),
-      (40, 'SessionTemplate'),
+      (40, 'SessionTemplate'), (41, 'ActiveProtocol'),
     ];
 
     for (final (id, name) in adapters) {
@@ -297,6 +307,35 @@ class StorageService {
 
   UserProfile? getUserProfile() => _userProfileBox?.get('profile');
 
+  Future<void> updateLastMealTime() async {
+    final existing = getUserProfile();
+    if (existing == null) return;
+
+    final updated = UserProfile(
+      userId: existing.userId,
+      createdAt: existing.createdAt,
+      biologicalSex: existing.biologicalSex,
+      dateOfBirth: existing.dateOfBirth,
+      heightCm: existing.heightCm,
+      weightKg: existing.weightKg,
+      healthGoals: existing.healthGoals,
+      knownConditions: existing.knownConditions,
+      baselineEstablished: existing.baselineEstablished,
+      aiProvider: existing.aiProvider,
+      aiModel: existing.aiModel,
+      preferredUnits: existing.preferredUnits,
+      aiCoachingStyle: existing.aiCoachingStyle,
+      mthfr: existing.mthfr,
+      apoe: existing.apoe,
+      comt: existing.comt,
+      fastingType: existing.fastingType,
+      eatWindowStartHour: existing.eatWindowStartHour,
+      eatWindowEndHour: existing.eatWindowEndHour,
+      lastMealTime: DateTime.now(),
+    );
+    await saveUserProfile(updated);
+  }
+
   // ---------------------------------------------------------------------------
   // Connector States
   // ---------------------------------------------------------------------------
@@ -346,6 +385,7 @@ class StorageService {
     await _biometricRecordsBox?.clear();
     await _bloodworkBox?.clear();
     await _sessionTemplatesBox?.clear();
+    await _activeProtocolsBox?.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -388,5 +428,53 @@ class StorageService {
       useCount: existing.useCount + 1,
     );
     await _sessionTemplatesBox?.put(id, updated);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Active Protocols
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveActiveProtocol(ActiveProtocol protocol) async {
+    await _activeProtocolsBox?.put(protocol.id, protocol);
+  }
+
+  ActiveProtocol? getActiveProtocol(String id) =>
+      _activeProtocolsBox?.get(id);
+
+  List<ActiveProtocol> getAllActiveProtocols() {
+    if (_activeProtocolsBox == null) return [];
+    return _activeProtocolsBox!.values
+        .where((p) => p.isActive)
+        .toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+  }
+
+  List<ActiveProtocol> getAllProtocols() {
+    if (_activeProtocolsBox == null) return [];
+    return _activeProtocolsBox!.values.toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+  }
+
+  Future<void> endProtocol(String id) async {
+    final existing = _activeProtocolsBox?.get(id);
+    if (existing == null) return;
+
+    final updated = ActiveProtocol(
+      id: existing.id,
+      name: existing.name,
+      type: existing.type,
+      startDate: existing.startDate,
+      endDate: DateTime.now(),
+      cycleLengthDays: existing.cycleLengthDays,
+      doseMcg: existing.doseMcg,
+      route: existing.route,
+      notes: existing.notes,
+      isActive: false,
+    );
+    await _activeProtocolsBox?.put(id, updated);
+  }
+
+  Future<void> deleteActiveProtocol(String id) async {
+    await _activeProtocolsBox?.delete(id);
   }
 }

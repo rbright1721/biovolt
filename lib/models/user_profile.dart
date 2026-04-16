@@ -107,6 +107,18 @@ class UserProfile {
   @HiveField(15)
   final String? comt;
 
+  @HiveField(16)
+  final String? fastingType;
+
+  @HiveField(17)
+  final int? eatWindowStartHour;
+
+  @HiveField(18)
+  final int? eatWindowEndHour;
+
+  @HiveField(19)
+  final DateTime? lastMealTime;
+
   UserProfile({
     required this.userId,
     required this.createdAt,
@@ -124,6 +136,10 @@ class UserProfile {
     this.mthfr,
     this.apoe,
     this.comt,
+    this.fastingType,
+    this.eatWindowStartHour,
+    this.eatWindowEndHour,
+    this.lastMealTime,
   });
 
   Map<String, dynamic> toJson() => {
@@ -143,6 +159,10 @@ class UserProfile {
         'mthfr': mthfr,
         'apoe': apoe,
         'comt': comt,
+        'fastingType': fastingType,
+        'eatWindowStartHour': eatWindowStartHour,
+        'eatWindowEndHour': eatWindowEndHour,
+        'lastMealTime': lastMealTime?.toIso8601String(),
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -168,5 +188,11 @@ class UserProfile {
         mthfr: json['mthfr'] as String?,
         apoe: json['apoe'] as String?,
         comt: json['comt'] as String?,
+        fastingType: json['fastingType'] as String?,
+        eatWindowStartHour: json['eatWindowStartHour'] as int?,
+        eatWindowEndHour: json['eatWindowEndHour'] as int?,
+        lastMealTime: json['lastMealTime'] != null
+            ? DateTime.parse(json['lastMealTime'] as String)
+            : null,
       );
 }

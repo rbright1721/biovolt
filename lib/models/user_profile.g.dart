@@ -76,13 +76,17 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       mthfr: fields[13] as String?,
       apoe: fields[14] as String?,
       comt: fields[15] as String?,
+      fastingType: fields[16] as String?,
+      eatWindowStartHour: fields[17] as int?,
+      eatWindowEndHour: fields[18] as int?,
+      lastMealTime: fields[19] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfile obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.userId)
       ..writeByte(1)
@@ -114,7 +118,15 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       ..writeByte(14)
       ..write(obj.apoe)
       ..writeByte(15)
-      ..write(obj.comt);
+      ..write(obj.comt)
+      ..writeByte(16)
+      ..write(obj.fastingType)
+      ..writeByte(17)
+      ..write(obj.eatWindowStartHour)
+      ..writeByte(18)
+      ..write(obj.eatWindowEndHour)
+      ..writeByte(19)
+      ..write(obj.lastMealTime);
   }
 
   @override
