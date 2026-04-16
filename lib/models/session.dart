@@ -12,6 +12,7 @@
 // =============================================================================
 
 import 'package:hive/hive.dart';
+import 'interventions.dart';
 
 part 'session.g.dart';
 
@@ -524,6 +525,9 @@ class Session {
   @HiveField(8)
   final SessionSubjective? subjective;
 
+  @HiveField(9)
+  final Interventions? interventions;
+
   Session({
     required this.sessionId,
     required this.userId,
@@ -534,6 +538,7 @@ class Session {
     this.context,
     this.biometrics,
     this.subjective,
+    this.interventions,
   });
 
   Map<String, dynamic> toJson() => {
@@ -546,6 +551,7 @@ class Session {
         'context': context?.toJson(),
         'biometrics': biometrics?.toJson(),
         'subjective': subjective?.toJson(),
+        'interventions': interventions?.toJson(),
       };
 
   factory Session.fromJson(Map<String, dynamic> json) => Session(
@@ -568,6 +574,10 @@ class Session {
         subjective: json['subjective'] != null
             ? SessionSubjective.fromJson(
                 json['subjective'] as Map<String, dynamic>)
+            : null,
+        interventions: json['interventions'] != null
+            ? Interventions.fromJson(
+                json['interventions'] as Map<String, dynamic>)
             : null,
       );
 }

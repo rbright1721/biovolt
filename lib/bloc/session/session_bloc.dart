@@ -68,7 +68,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     );
 
     // Start the recorder — it subscribes to connector live streams
-    final sessionId = sessionRecorder.startSession(context);
+    final sessionId =
+        sessionRecorder.startSession(context, event.interventions);
 
     // Subscribe to coach stream
     _coachSub?.cancel();

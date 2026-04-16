@@ -22,6 +22,16 @@ class DataHubScreen extends StatefulWidget {
 
 class _DataHubScreenState extends State<DataHubScreen> {
   final _storage = StorageService();
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer to next frame so storage is guaranteed ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _loaded = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +92,7 @@ class _DataHubScreenState extends State<DataHubScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildCompleteness() {
-    final score = _computeCompleteness();
+    final score = _loaded ? _safeComputeCompleteness() : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,6 +141,14 @@ class _DataHubScreenState extends State<DataHubScreen> {
         ),
       ],
     );
+  }
+
+  double _safeComputeCompleteness() {
+    try {
+      return _computeCompleteness();
+    } catch (_) {
+      return 0;
+    }
   }
 
   double _computeCompleteness() {

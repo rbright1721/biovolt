@@ -433,13 +433,14 @@ class SessionAdapter extends TypeAdapter<Session> {
       context: fields[6] as SessionContext?,
       biometrics: fields[7] as SessionBiometrics?,
       subjective: fields[8] as SessionSubjective?,
+      interventions: fields[9] as Interventions?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Session obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.sessionId)
       ..writeByte(1)
@@ -457,7 +458,9 @@ class SessionAdapter extends TypeAdapter<Session> {
       ..writeByte(7)
       ..write(obj.biometrics)
       ..writeByte(8)
-      ..write(obj.subjective);
+      ..write(obj.subjective)
+      ..writeByte(9)
+      ..write(obj.interventions);
   }
 
   @override

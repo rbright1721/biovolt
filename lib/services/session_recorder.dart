@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../connectors/connector_registry.dart';
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
+import '../models/interventions.dart';
 import '../models/normalized_record.dart';
 import '../models/session.dart';
 import 'ai_service.dart';
@@ -27,6 +28,8 @@ class SessionRecorder {
   StreamSubscription? _sensorSubscription;
   Timer? _persistTimer;
   Timer? _coachTimer;
+
+  bool _coachRunning = false;
 
   /// Rolling 60-second window of raw NormalizedRecords.
   final _recordBuffer = ListQueue<NormalizedRecord>();
@@ -72,7 +75,7 @@ class SessionRecorder {
   /// Start recording a new session.
   ///
   /// Returns the generated sessionId.
-  String startSession(SessionContext context) {
+  String startSession(SessionContext context, [Interventions? interventions]) {
     final now = DateTime.now();
     final sessionId = now.millisecondsSinceEpoch.toString();
 
@@ -90,6 +93,7 @@ class SessionRecorder {
       timezone: now.timeZoneName,
       dataSources: connectedIds,
       context: context,
+      interventions: interventions,
     );
 
     _recordBuffer.clear();
@@ -152,6 +156,7 @@ class SessionRecorder {
         esp32: esp32,
         computed: computed,
       ),
+      interventions: base.interventions,
     );
 
     await _storage.saveSession(finalSession);
@@ -237,6 +242,7 @@ class SessionRecorder {
       dataSources: session.dataSources,
       context: session.context,
       biometrics: SessionBiometrics(esp32: esp32, computed: computed),
+      interventions: session.interventions,
     );
 
     _storage.saveSession(updated);
@@ -247,11 +253,12 @@ class SessionRecorder {
   // ---------------------------------------------------------------------------
 
   Future<void> _runQuickCoach() async {
-    if (_activeSession == null) return;
+    if (_activeSession == null || _coachRunning) return;
 
     final hasKey = await _aiService.hasValidKey();
     if (!hasKey) return;
 
+    _coachRunning = true;
     try {
       final prompt = await _promptBuilder.buildQuickCoachPrompt(
         _activeSession!,
@@ -267,6 +274,8 @@ class SessionRecorder {
     } catch (e) {
       // Fail silently — don't interrupt session for coaching errors
       debugPrint('Quick coach error: $e');
+    } finally {
+      _coachRunning = false;
     }
   }
 

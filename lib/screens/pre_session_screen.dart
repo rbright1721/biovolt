@@ -759,8 +759,16 @@ class _PreSessionScreenState extends State<PreSessionScreen> {
       bloc.add(BreathworkPatternSelected(_breathworkPattern!));
     }
 
-    // Start session
-    bloc.add(SessionStarted());
+    // Build interventions
+    final interventions = (_peptides.isNotEmpty || _supplements.isNotEmpty)
+        ? Interventions(
+            peptides: _peptides,
+            supplements: _supplements,
+          )
+        : null;
+
+    // Start session with interventions
+    bloc.add(SessionStarted(interventions: interventions));
 
     // Navigate to session screen
     Navigator.of(context).pushReplacement(

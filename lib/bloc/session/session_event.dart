@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../models/ai_analysis.dart';
+import '../../models/interventions.dart';
 import '../../models/sensor_snapshot.dart';
 import '../../models/session_type.dart';
 
@@ -15,7 +16,12 @@ class SessionTypeSelected extends SessionEvent {
   List<Object?> get props => [type];
 }
 
-class SessionStarted extends SessionEvent {}
+class SessionStarted extends SessionEvent {
+  final Interventions? interventions;
+  SessionStarted({this.interventions});
+  @override
+  List<Object?> get props => [interventions];
+}
 
 class SessionPaused extends SessionEvent {}
 

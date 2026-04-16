@@ -99,8 +99,12 @@ class Esp32Connector implements BioVoltConnector {
       _bleService.hrvStream.listen((rmssd) {
         controller.add(HRVReading(
           rmssdMs: rmssd,
-          source: DataSource.ppg50hz,
-          quality: DataQuality.consumer,
+          source: _bleService.ecgActive
+              ? DataSource.ecg130hz
+              : DataSource.ppg50hz,
+          quality: _bleService.ecgActive
+              ? DataQuality.research
+              : DataQuality.consumer,
           connectorId: connectorId,
           timestamp: DateTime.now(),
         ));
