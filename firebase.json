@@ -1,15 +1,1 @@
-{
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ]
-    }
-  ]
-}
+{"functions":[{"source":"functions","codebase":"default","ignore":["node_modules",".git","firebase-debug.log","firebase-debug.*.log","*.local"]}],"flutter":{"platforms":{"android":{"default":{"projectId":"biovolt","appId":"1:551736633719:android:182e58ea12a26a467c9972","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"biovolt","configurations":{"android":"1:551736633719:android:182e58ea12a26a467c9972","ios":"1:551736633719:ios:048db425cfddf2947c9972","macos":"1:551736633719:ios:048db425cfddf2947c9972","web":"1:551736633719:web:3b30db4fdc4c90927c9972","windows":"1:551736633719:web:69fd0631eb5433fa7c9972"}}}}}}

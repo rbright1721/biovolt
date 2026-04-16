@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -27,30 +28,54 @@ class AuthService {
   /// If user was previously anonymous, links the accounts so
   /// all existing data is preserved under the same UID.
   Future<UserCredential?> signInWithGoogle() async {
-    final googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) return null; // user cancelled
+    try {
+      // Force account picker to show even if already signed in to Google
+      await _googleSignIn.signOut();
 
-    final googleAuth = await googleUser.authentication;
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
+      final googleUser = await _googleSignIn.signIn();
+      debugPrint('Google user: ${googleUser?.email}');
 
-    // If currently anonymous, link to Google account
-    final currentUser = _auth.currentUser;
-    if (currentUser != null && currentUser.isAnonymous) {
-      try {
-        return await currentUser.linkWithCredential(credential);
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'credential-already-in-use') {
-          // Google account already exists — sign in to it instead
-          return await _auth.signInWithCredential(credential);
-        }
-        rethrow;
+      if (googleUser == null) {
+        debugPrint('Google sign-in cancelled by user');
+        return null;
       }
-    }
 
-    return await _auth.signInWithCredential(credential);
+      final googleAuth = await googleUser.authentication;
+      debugPrint('Got google auth tokens');
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final currentUser = _auth.currentUser;
+      if (currentUser != null && currentUser.isAnonymous) {
+        try {
+          final result = await currentUser.linkWithCredential(credential);
+          debugPrint('Linked anonymous to Google: ${result.user?.uid}');
+          return result;
+        } on FirebaseAuthException catch (e) {
+          debugPrint('Link failed (${e.code}), signing in directly');
+          if (e.code == 'credential-already-in-use' ||
+              e.code == 'email-already-in-use') {
+            return await _auth.signInWithCredential(credential);
+          }
+          rethrow;
+        }
+      }
+
+      final result = await _auth.signInWithCredential(credential);
+      debugPrint('Signed in: ${result.user?.uid}');
+      return result;
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+          'FirebaseAuthException in signInWithGoogle: ${e.code} ${e.message}');
+      rethrow;
+    } catch (e, stack) {
+      debugPrint('Unexpected error in signInWithGoogle: $e');
+      debugPrint(stack.toString());
+      rethrow;
+    }
   }
 
   /// Sign in anonymously as guest.

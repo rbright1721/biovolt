@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
@@ -22,11 +23,31 @@ class _SignInScreenState extends State<SignInScreen> {
     });
     try {
       final result = await AuthService().signInWithGoogle();
-      if (result != null && mounted) widget.onSignedIn();
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Sign in failed. Please try again.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (result != null && mounted) {
+        widget.onSignedIn();
+      } else if (mounted) {
+        setState(() {
+          _error = 'Sign-in cancelled. Please try again.';
+          _loading = false;
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('FirebaseAuthException: ${e.code} \u2014 ${e.message}');
+      if (mounted) {
+        setState(() {
+          _error = 'Firebase error: ${e.code}\n${e.message}';
+          _loading = false;
+        });
+      }
+    } catch (e, stack) {
+      debugPrint('Google Sign-In error: $e');
+      debugPrint('Stack: $stack');
+      if (mounted) {
+        setState(() {
+          _error = 'Error: $e';
+          _loading = false;
+        });
+      }
     }
   }
 

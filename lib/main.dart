@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
+import 'firebase_options.dart';
 import 'connectors/connector_esp32.dart';
 import 'connectors/connector_oura.dart';
 import 'connectors/connector_polar.dart';
@@ -30,14 +31,7 @@ void main() async {
   ));
 
   await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: 'AIzaSyBPlaceholderWebApiKey',
-      authDomain: 'biovolt.firebaseapp.com',
-      projectId: 'biovolt',
-      storageBucket: 'biovolt.firebasestorage.app',
-      messagingSenderId: '551736633719',
-      appId: '1:551736633719:web:placeholder',
-    ),
+    options: DefaultFirebaseOptions.currentPlatform,
   );
 
   final storageService = StorageService();

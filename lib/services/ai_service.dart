@@ -37,11 +37,12 @@ class AiTimeoutException implements Exception {
 
 class AiService {
   static const _claudeModel = 'claude-sonnet-4-5';
+  static const _region = 'us-central1';
 
-  final FirebaseFunctions _functions;
+  FirebaseFunctions get _functions =>
+      FirebaseFunctions.instanceFor(region: _region);
 
-  AiService({FirebaseFunctions? functions})
-      : _functions = functions ?? FirebaseFunctions.instance;
+  AiService();
 
   // ---------------------------------------------------------------------------
   // Key management (retained for API compatibility — always returns true)
