@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../bloc/session/session_bloc.dart';
 import '../config/theme.dart';
 import '../models/session.dart';
@@ -31,6 +32,11 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
   final _notableCtrl = TextEditingController();
   final _sideEffectsCtrl = TextEditingController();
 
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+  String _voiceTranscript = '';
+
   bool _hasKey = false;
   bool _saving = false;
 
@@ -40,10 +46,14 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
     AiService().hasValidKey().then((v) {
       if (mounted) setState(() => _hasKey = v);
     });
+    _speech.initialize().then((available) {
+      if (mounted) setState(() => _speechAvailable = available);
+    });
   }
 
   @override
   void dispose() {
+    _speech.stop();
     _notableCtrl.dispose();
     _sideEffectsCtrl.dispose();
     super.dispose();
@@ -111,9 +121,9 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
                   const SizedBox(height: 10),
                   _buildSubjective(),
                   const SizedBox(height: 20),
-                  _sectionLabel('NOTABLE EFFECTS'),
+                  _buildVoiceNoteField(),
                   const SizedBox(height: 10),
-                  _buildNotesSection(),
+                  _buildSideEffectsAndQuality(),
                   const SizedBox(height: 20),
                   _buildAiSection(),
                   const SizedBox(height: 24),
@@ -233,16 +243,193 @@ class _PostSessionScreenState extends State<PostSessionScreen> {
   // Notes + quality
   // ---------------------------------------------------------------------------
 
-  Widget _buildNotesSection() {
+  // ---------------------------------------------------------------------------
+  // Voice note field (replaces notable effects text area)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildVoiceNoteField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Anything worth noting?',
-            style: GoogleFonts.jetBrainsMono(
-                fontSize: 10, color: BioVoltColors.textSecondary)),
-        const SizedBox(height: 6),
-        _textArea(_notableCtrl),
-        const SizedBox(height: 10),
+        // Label row
+        Row(
+          children: [
+            _sectionLabel('NOTABLE EFFECTS'),
+            const Spacer(),
+            if (_speechAvailable)
+              GestureDetector(
+                onTap: _toggleListening,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _isListening
+                        ? BioVoltColors.teal.withAlpha(30)
+                        : BioVoltColors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _isListening
+                          ? BioVoltColors.teal
+                          : BioVoltColors.cardBorder,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isListening
+                            ? Icons.stop_rounded
+                            : Icons.mic_rounded,
+                        size: 14,
+                        color: _isListening
+                            ? BioVoltColors.teal
+                            : BioVoltColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isListening ? 'STOP' : 'VOICE',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _isListening
+                              ? BioVoltColors.teal
+                              : BioVoltColors.textSecondary,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Transcript display
+        if (_voiceTranscript.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: BioVoltColors.teal.withAlpha(15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BioVoltColors.teal.withAlpha(60)),
+            ),
+            child: Text(
+              _voiceTranscript,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: BioVoltColors.textPrimary,
+                height: 1.5,
+              ),
+            ),
+          ),
+
+        // Listening indicator
+        if (_isListening)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 8,
+                  height: 8,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: BioVoltColors.teal,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Listening...',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: BioVoltColors.teal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // Text field
+        TextField(
+          controller: _notableCtrl,
+          maxLines: 3,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 11,
+            color: BioVoltColors.textPrimary,
+          ),
+          decoration: InputDecoration(
+            hintText: _speechAvailable
+                ? 'Type or use voice above...'
+                : 'Notable effects, observations...',
+            hintStyle: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              color: BioVoltColors.textSecondary,
+            ),
+            filled: true,
+            fillColor: BioVoltColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: BioVoltColors.cardBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: BioVoltColors.cardBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: BioVoltColors.teal),
+            ),
+            contentPadding: const EdgeInsets.all(10),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      // Append transcript to the text field
+      if (_voiceTranscript.isNotEmpty) {
+        final existing = _notableCtrl.text.trim();
+        _notableCtrl.text = existing.isEmpty
+            ? _voiceTranscript
+            : '$existing. $_voiceTranscript';
+      }
+    } else {
+      setState(() {
+        _isListening = true;
+        _voiceTranscript = '';
+      });
+      await _speech.listen(
+        onResult: (result) {
+          setState(() {
+            _voiceTranscript = result.recognizedWords;
+          });
+        },
+        listenFor: const Duration(seconds: 60),
+        pauseFor: const Duration(seconds: 4),
+        localeId: 'en_US',
+        listenOptions: SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: true,
+        ),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Side effects + quality (split from old _buildNotesSection)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSideEffectsAndQuality() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text('Side effects?',
             style: GoogleFonts.jetBrainsMono(
                 fontSize: 10, color: BioVoltColors.textSecondary)),

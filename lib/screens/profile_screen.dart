@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
+import '../models/active_protocol.dart';
 import '../models/user_profile.dart';
 import '../services/storage_service.dart';
 
@@ -49,6 +50,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _apoe = 'Unknown';
   String _comt = 'Unknown';
 
+  // Fasting
+  String _fastingType = 'none';
+  int _eatWindowStartHour = 12;
+  int _eatWindowEndHour = 20;
+  DateTime? _lastMealTime;
+
+  // Protocols
+  List<ActiveProtocol> _protocols = [];
+
   bool _saving = false;
 
   @override
@@ -76,6 +86,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _mthfr = profile.mthfr ?? 'Unknown';
     _apoe = profile.apoe ?? 'Unknown';
     _comt = profile.comt ?? 'Unknown';
+    _fastingType = profile.fastingType ?? 'none';
+    _eatWindowStartHour = profile.eatWindowStartHour ?? 12;
+    _eatWindowEndHour = profile.eatWindowEndHour ?? 20;
+    _lastMealTime = profile.lastMealTime;
+    _protocols = _storage.getAllActiveProtocols();
   }
 
   @override
@@ -152,6 +167,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _sectionLabel('GENETIC MARKERS'),
                   const SizedBox(height: 10),
                   _buildGenetics(),
+                  const SizedBox(height: 24),
+                  _buildFastingSection(),
+                  const SizedBox(height: 24),
+                  _buildProtocolsSection(),
                   const SizedBox(height: 24),
                   _buildSaveButton(),
                   const SizedBox(height: 40),
@@ -512,6 +531,544 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // Fasting
+  // ---------------------------------------------------------------------------
+
+  Widget _buildFastingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('FASTING SCHEDULE'),
+        const SizedBox(height: 10),
+        // Type chips
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in [
+              ('None', 'none'),
+              ('16:8', '16:8'),
+              ('5:2', '5:2'),
+              ('24hr', '24hr'),
+            ])
+              _chip(entry.$1,
+                  selected: _fastingType == entry.$2,
+                  onTap: () => setState(() => _fastingType = entry.$2)),
+          ],
+        ),
+        // Eat window pickers
+        if (_fastingType == '16:8' || _fastingType == '5:2') ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _label('Eating window'),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _pickEatHour(isStart: true),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: BioVoltColors.cardBorder),
+                  ),
+                  child: Text(
+                    _formatHour(_eatWindowStartHour),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: BioVoltColors.teal,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  '\u2192',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: BioVoltColors.textSecondary,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _pickEatHour(isStart: false),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: BioVoltColors.cardBorder),
+                  ),
+                  child: Text(
+                    _formatHour(_eatWindowEndHour),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: BioVoltColors.teal,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (_fastingType != 'none') ...[
+          const SizedBox(height: 8),
+          Text(
+            'Auto-calculates ${_computeFastHours()} hr fast',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              color: BioVoltColors.teal,
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        // "I JUST ATE" button
+        GestureDetector(
+          onTap: () async {
+            await _storage.updateLastMealTime();
+            setState(() => _lastMealTime = DateTime.now());
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: BioVoltColors.amber.withAlpha(15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: BioVoltColors.amber.withAlpha(100), width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _lastMealTime == null
+                  ? 'I JUST ATE \u2014 set meal time'
+                  : 'LAST MEAL: ${_formatLastMeal(_lastMealTime!)}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: BioVoltColors.amber,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickEatHour({required bool isStart}) async {
+    final initial = isStart ? _eatWindowStartHour : _eatWindowEndHour;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: initial, minute: 0),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: BioVoltColors.teal,
+            surface: BioVoltColors.surface,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _eatWindowStartHour = picked.hour;
+        } else {
+          _eatWindowEndHour = picked.hour;
+        }
+      });
+    }
+  }
+
+  int _computeFastHours() {
+    final diff = _eatWindowEndHour - _eatWindowStartHour;
+    final eatWindow = diff < 0 ? 24 + diff : diff;
+    return 24 - eatWindow;
+  }
+
+  String _formatHour(int hour) {
+    final h = hour % 12 == 0 ? 12 : hour % 12;
+    final period = hour < 12 ? 'am' : 'pm';
+    return '$h:00 $period';
+  }
+
+  String _formatLastMeal(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Active Protocols
+  // ---------------------------------------------------------------------------
+
+  Widget _buildProtocolsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('ACTIVE PROTOCOLS'),
+        const SizedBox(height: 10),
+        if (_protocols.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Center(
+              child: Text(
+                'No active protocols \u2014 add one below',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: BioVoltColors.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        for (final p in _protocols) _buildProtocolCard(p),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _showAddProtocolSheet,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: BioVoltColors.teal.withAlpha(15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: BioVoltColors.teal.withAlpha(80), width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              'ADD PROTOCOL',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: BioVoltColors.teal,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProtocolCard(ActiveProtocol protocol) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: BioVoltColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  protocol.name,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: BioVoltColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${protocol.currentCycleDay} / ${protocol.cycleLengthDays} days',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: protocol.isActive
+                        ? BioVoltColors.teal
+                        : BioVoltColors.textSecondary,
+                  ),
+                ),
+                if (protocol.doseMcg > 0)
+                  Text(
+                    '${protocol.doseMcg.toStringAsFixed(0)}mcg ${protocol.route}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: BioVoltColors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (protocol.isActive)
+            GestureDetector(
+              onTap: () async {
+                await _storage.endProtocol(protocol.id);
+                _reloadProtocols();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: BioVoltColors.cardBorder),
+                ),
+                child: Text(
+                  'END',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    color: BioVoltColors.textSecondary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Text(
+              'INACTIVE',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: BioVoltColors.textSecondary,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _reloadProtocols() {
+    setState(() => _protocols = _storage.getAllActiveProtocols());
+  }
+
+  void _showAddProtocolSheet() {
+    final nameCtrl = TextEditingController();
+    final doseCtrl = TextEditingController();
+    final totalDaysCtrl = TextEditingController(text: '30');
+    String type = 'peptide';
+    String route = 'subq';
+    DateTime startDate = DateTime.now();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        return Container(
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          decoration: const BoxDecoration(
+            color: BioVoltColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.textSecondary.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                'ADD PROTOCOL',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: BioVoltColors.teal,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Name
+              _sheetField(nameCtrl, 'Name (e.g. BPC-157)'),
+              const SizedBox(height: 8),
+              // Type chips
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in [
+                    ('Peptide', 'peptide'),
+                    ('Supplement', 'supplement'),
+                    ('Other', 'other'),
+                  ])
+                    _sheetChip(entry.$1,
+                        selected: type == entry.$2,
+                        onTap: () => setSheet(() => type = entry.$2)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Dose
+              _sheetField(doseCtrl, 'Daily dose (mcg, optional)'),
+              const SizedBox(height: 8),
+              // Route chips
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in [
+                    ('Subq', 'subq'),
+                    ('Oral', 'oral'),
+                    ('Topical', 'topical'),
+                    ('Nasal', 'nasal'),
+                  ])
+                    _sheetChip(entry.$1,
+                        selected: route == entry.$2,
+                        onTap: () => setSheet(() => route = entry.$2)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Total days
+              _sheetField(totalDaysCtrl, 'Total days'),
+              const SizedBox(height: 8),
+              // Start date
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: startDate,
+                    firstDate:
+                        DateTime.now().subtract(const Duration(days: 365)),
+                    lastDate:
+                        DateTime.now().add(const Duration(days: 30)),
+                    builder: (context, child) => Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.dark(
+                          primary: BioVoltColors.teal,
+                          surface: BioVoltColors.surface,
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) setSheet(() => startDate = picked);
+                },
+                child: Row(
+                  children: [
+                    Text(
+                      'Started: ${startDate.month}/${startDate.day}/${startDate.year}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        color: BioVoltColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.edit_rounded,
+                        size: 14, color: BioVoltColors.teal),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              // ADD button
+              GestureDetector(
+                onTap: () {
+                  if (nameCtrl.text.trim().isEmpty) return;
+                  final protocol = ActiveProtocol(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: nameCtrl.text.trim(),
+                    type: type,
+                    startDate: startDate,
+                    cycleLengthDays:
+                        int.tryParse(totalDaysCtrl.text) ?? 30,
+                    doseMcg: double.tryParse(doseCtrl.text) ?? 0,
+                    route: route,
+                    isActive: true,
+                  );
+                  _storage.saveActiveProtocol(protocol);
+                  Navigator.of(ctx).pop();
+                  _reloadProtocols();
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.teal.withAlpha(20),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: BioVoltColors.teal.withAlpha(120), width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'ADD',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: BioVoltColors.teal,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _sheetField(TextEditingController ctrl, String label) {
+    return TextField(
+      controller: ctrl,
+      style: GoogleFonts.jetBrainsMono(
+        fontSize: 12,
+        color: BioVoltColors.textPrimary,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.jetBrainsMono(
+          fontSize: 11,
+          color: BioVoltColors.textSecondary,
+        ),
+        filled: true,
+        fillColor: BioVoltColors.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: BioVoltColors.cardBorder),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        isDense: true,
+      ),
+    );
+  }
+
+  Widget _sheetChip(String label,
+      {required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? BioVoltColors.teal.withAlpha(20)
+              : BioVoltColors.background,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: selected
+                ? BioVoltColors.teal.withAlpha(100)
+                : BioVoltColors.cardBorder,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color:
+                selected ? BioVoltColors.teal : BioVoltColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Save
   // ---------------------------------------------------------------------------
 
@@ -566,10 +1123,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       mthfr: _mthfr == 'Unknown' ? null : _mthfr,
       apoe: _apoe == 'Unknown' ? null : _apoe,
       comt: _comt == 'Unknown' ? null : _comt,
-      fastingType: existing?.fastingType,
-      eatWindowStartHour: existing?.eatWindowStartHour,
-      eatWindowEndHour: existing?.eatWindowEndHour,
-      lastMealTime: existing?.lastMealTime,
+      fastingType: _fastingType == 'none' ? null : _fastingType,
+      eatWindowStartHour: _eatWindowStartHour,
+      eatWindowEndHour: _eatWindowEndHour,
+      lastMealTime: _lastMealTime,
     );
 
     await _storage.saveUserProfile(profile);

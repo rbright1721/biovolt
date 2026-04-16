@@ -11,7 +11,7 @@ import '../models/signal_info.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_info_sheet.dart';
-import 'pre_session_screen.dart';
+import 'template_launcher_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   final BleService bleService;
@@ -55,7 +55,7 @@ class DashboardScreen extends StatelessWidget {
   void _showSessionSelector(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PreSessionScreen(bleService: bleService),
+        builder: (_) => TemplateLauncherScreen(bleService: bleService),
       ),
     );
   }

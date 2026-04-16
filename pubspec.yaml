@@ -23,6 +23,7 @@ dependencies:
   url_launcher: ^6.3.2
   polar: ^7.10.0
   shared_preferences: ^2.5.5
+  speech_to_text: ^6.6.0
 
 dev_dependencies:
   flutter_test:
