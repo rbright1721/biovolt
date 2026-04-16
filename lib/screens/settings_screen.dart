@@ -5,6 +5,7 @@ import '../connectors/connector_base.dart';
 import '../connectors/connector_oura.dart';
 import '../connectors/connector_registry.dart';
 import '../models/normalized_record.dart';
+import '../services/auth_service.dart';
 import '../services/oura_sync_service.dart';
 import '../services/storage_service.dart';
 import 'profile_screen.dart';
@@ -96,6 +97,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _buildDevicesSection(),
                   const SizedBox(height: 24),
                   _buildDataSection(),
+                  const SizedBox(height: 24),
+                  _buildAccountSection(),
                   const SizedBox(height: 24),
                   _buildAboutSection(),
                   const SizedBox(height: 40),
@@ -555,6 +558,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Account
+  // ---------------------------------------------------------------------------
+
+  Widget _buildAccountSection() {
+    final auth = AuthService();
+    return _Section(
+      title: 'ACCOUNT',
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BioVoltTheme.glassCard(),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_circle_rounded,
+                      color: BioVoltColors.teal, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          auth.displayName,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: BioVoltColors.textPrimary,
+                          ),
+                        ),
+                        if (auth.email != null)
+                          Text(
+                            auth.email!,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              color: BioVoltColors.textSecondary,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Guest account \u2014 data saved locally',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              color: BioVoltColors.textSecondary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  await auth.signOut();
+                  nav.pushNamedAndRemoveUntil('/', (route) => false);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: BioVoltColors.cardBorder),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'SIGN OUT',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: BioVoltColors.textSecondary,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

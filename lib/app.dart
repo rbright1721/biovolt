@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,7 @@ import 'screens/data_hub_screen.dart';
 import 'screens/session_history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/sign_in_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
 import 'services/session_recorder.dart';
@@ -41,6 +43,26 @@ class BioVoltApp extends StatefulWidget {
 }
 
 class _BioVoltAppState extends State<BioVoltApp> {
+  bool _authChecked = false;
+  bool _isSignedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+  }
+
+  Future<void> _checkAuth() async {
+    // Wait for Firebase to restore auth state
+    await FirebaseAuth.instance.authStateChanges().first;
+    if (mounted) {
+      setState(() {
+        _isSignedIn = FirebaseAuth.instance.currentUser != null;
+        _authChecked = true;
+      });
+    }
+  }
+
   @override
   void dispose() {
     widget.bleService.dispose();
@@ -75,16 +97,37 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
-        home: widget.firstLaunch
-            ? _FirstLaunchWrapper(
-                bleService: widget.bleService,
-                trendAnalyst: widget.trendAnalyst,
-              )
-            : _MainShell(
-                bleService: widget.bleService,
-                trendAnalyst: widget.trendAnalyst,
-              ),
+        home: _buildHome(),
       ),
+    );
+  }
+
+  Widget _buildHome() {
+    if (!_authChecked) {
+      return const Scaffold(
+        backgroundColor: BioVoltColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: BioVoltColors.teal),
+        ),
+      );
+    }
+
+    if (!_isSignedIn) {
+      return SignInScreen(
+        onSignedIn: () => setState(() => _isSignedIn = true),
+      );
+    }
+
+    if (widget.firstLaunch) {
+      return _FirstLaunchWrapper(
+        bleService: widget.bleService,
+        trendAnalyst: widget.trendAnalyst,
+      );
+    }
+
+    return _MainShell(
+      bleService: widget.bleService,
+      trendAnalyst: widget.trendAnalyst,
     );
   }
 }

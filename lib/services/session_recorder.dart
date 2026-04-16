@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../connectors/connector_registry.dart';
+import 'auth_service.dart';
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
 import '../models/interventions.dart';
@@ -88,7 +89,7 @@ class SessionRecorder {
 
     _activeSession = Session(
       sessionId: sessionId,
-      userId: 'local',
+      userId: AuthService().currentUserId ?? 'anonymous',
       createdAt: now,
       timezone: now.timeZoneName,
       dataSources: connectedIds,

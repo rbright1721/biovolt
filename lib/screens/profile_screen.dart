@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/active_protocol.dart';
 import '../models/user_profile.dart';
+import '../services/auth_service.dart';
 import '../services/storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -1109,7 +1110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final existing = _storage.getUserProfile();
     final profile = UserProfile(
-      userId: existing?.userId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: existing?.userId ?? AuthService().currentUserId ?? 'anonymous',
       createdAt: existing?.createdAt ?? DateTime.now(),
       biologicalSex: _sex,
       dateOfBirth: _dob,

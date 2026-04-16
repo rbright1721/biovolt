@@ -7,6 +7,7 @@ import '../config/theme.dart';
 import '../models/ai_analysis.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
+import '../models/vitals_bookmark.dart';
 import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 
@@ -27,11 +28,16 @@ class AnalysisScreen extends StatefulWidget {
 class _AnalysisScreenState extends State<AnalysisScreen> {
   AiAnalysis? _analysis;
   bool _hasKey = false;
+  List<VitalsBookmark> _nearbyBookmarks = [];
 
   @override
   void initState() {
     super.initState();
     _analysis = widget.analysis;
+    _nearbyBookmarks = StorageService().getBookmarksInRange(
+      widget.session.createdAt.subtract(const Duration(hours: 24)),
+      widget.session.createdAt,
+    );
     _checkKeyAndLoadAnalysis();
   }
 
@@ -72,6 +78,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   children: [
                     const SizedBox(height: 16),
                     _buildMetricsSummary(),
+                    const SizedBox(height: 20),
+                    _buildNearbyBookmarks(),
                     const SizedBox(height: 20),
                     _buildAnalysisSection(),
                     const SizedBox(height: 20),
@@ -615,6 +623,92 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 ),
               ))
           .toList(),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Nearby bookmarks (24hr before session)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildNearbyBookmarks() {
+    if (_nearbyBookmarks.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('CONTEXT (24hr before)'),
+        const SizedBox(height: 10),
+        ..._nearbyBookmarks.map((b) {
+          final dt = b.timestamp;
+          final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+          final period = dt.hour < 12 ? 'am' : 'pm';
+          final min = dt.minute.toString().padLeft(2, '0');
+          final timeStr = '$h:$min $period';
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: BioVoltColors.teal.withAlpha(10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BioVoltColors.teal.withAlpha(40)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.bookmark_rounded,
+                    size: 12, color: BioVoltColors.teal),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (b.note != null)
+                        Text(
+                          b.note!,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: BioVoltColors.textPrimary,
+                            height: 1.5,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          if (b.hrBpm != null)
+                            Text('HR ${b.hrBpm!.toStringAsFixed(0)}',
+                                style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: BioVoltColors.textSecondary)),
+                          if (b.hrvMs != null)
+                            Text('HRV ${b.hrvMs!.toStringAsFixed(0)}ms',
+                                style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: BioVoltColors.textSecondary)),
+                          if (b.gsrUs != null)
+                            Text(
+                                'GSR ${b.gsrUs!.toStringAsFixed(1)}\u00B5S',
+                                style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: BioVoltColors.textSecondary)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  timeStr,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    color: BioVoltColors.teal,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 

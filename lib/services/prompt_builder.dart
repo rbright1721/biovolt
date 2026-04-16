@@ -75,6 +75,38 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
     buf.writeln('=== CURRENT SESSION ===');
     _writeSession(buf, session);
 
+    // -- Vitals bookmarks from the last 24 hours --
+    buf.writeln();
+    buf.writeln('=== VITALS BOOKMARKS (last 24 hours) ===');
+    final sessionTime = session.createdAt;
+    final since = sessionTime.subtract(const Duration(hours: 24));
+    final bookmarks = _storage.getBookmarksInRange(since, sessionTime);
+
+    if (bookmarks.isEmpty) {
+      buf.writeln('No bookmarks recorded in the 24 hours before this session.');
+    } else {
+      for (final b in bookmarks) {
+        final timeStr = b.timestamp.toIso8601String();
+        buf.writeln('[$timeStr]');
+        if (b.note != null) buf.writeln('  Note: ${b.note}');
+        if (b.hrBpm != null) {
+          buf.writeln('  HR: ${b.hrBpm!.toStringAsFixed(0)} bpm');
+        }
+        if (b.hrvMs != null) {
+          buf.writeln('  HRV: ${b.hrvMs!.toStringAsFixed(0)} ms');
+        }
+        if (b.gsrUs != null) {
+          buf.writeln('  GSR: ${b.gsrUs!.toStringAsFixed(1)} \u00B5S');
+        }
+        if (b.spo2Percent != null) {
+          buf.writeln('  SpO2: ${b.spo2Percent!.toStringAsFixed(0)}%');
+        }
+        if (b.skinTempF != null) {
+          buf.writeln('  Temp: ${b.skinTempF!.toStringAsFixed(1)}\u00B0F');
+        }
+      }
+    }
+
     // -- Last night's Oura data --
     buf.writeln();
     buf.writeln('=== LAST NIGHT (OURA) ===');

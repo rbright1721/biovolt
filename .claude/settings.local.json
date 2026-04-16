@@ -15,7 +15,10 @@
       "Bash(find *)",
       "Bash(where firebase *)",
       "Bash(firebase projects:list)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(mv /tmp/biovolt_functions_env_backup C:/Users/jbrig/StudioProjects/biovolt/functions/.env)",
+      "Bash(mv /tmp/biovolt_google_services_backup C:/Users/jbrig/StudioProjects/biovolt/android/app/google-services.json)",
+      "Bash(./gradlew signingReport)"
     ]
   }
 }

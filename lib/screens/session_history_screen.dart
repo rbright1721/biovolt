@@ -6,6 +6,7 @@ import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
+import '../models/vitals_bookmark.dart';
 import '../services/storage_service.dart';
 import 'analysis_screen.dart';
 
@@ -16,6 +17,15 @@ class SessionHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SessionBloc, SessionState>(
       builder: (context, state) {
+        final bookmarks = StorageService().getAllBookmarks();
+        final timeline = <({String type, dynamic item, DateTime time})>[
+          ...state.history.map(
+              (s) => (type: 'session', item: s as dynamic, time: s.createdAt)),
+          ...bookmarks.map((b) =>
+              (type: 'bookmark', item: b as dynamic, time: b.timestamp)),
+        ];
+        timeline.sort((a, b) => b.time.compareTo(a.time));
+
         return Scaffold(
           backgroundColor: BioVoltColors.background,
           body: SafeArea(
@@ -37,15 +47,15 @@ class SessionHistoryScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
-                    '${state.history.length} recorded sessions',
+                    '${state.history.length} sessions \u2022 ${bookmarks.length} bookmarks',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: state.history.isEmpty
+                  child: timeline.isEmpty
                       ? _buildEmptyState()
-                      : _buildSessionList(context, state.history),
+                      : _buildTimeline(context, timeline),
                 ),
               ],
             ),
@@ -86,13 +96,19 @@ class SessionHistoryScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSessionList(BuildContext context, List<Session> sessions) {
+  Widget _buildTimeline(
+      BuildContext context,
+      List<({String type, dynamic item, DateTime time})> timeline) {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: sessions.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemCount: timeline.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        final session = sessions[index];
+        final entry = timeline[index];
+        if (entry.type == 'bookmark') {
+          return _BookmarkListCard(bookmark: entry.item as VitalsBookmark);
+        }
+        final session = entry.item as Session;
         return _SessionListCard(
           session: session,
           onTap: () => _showSessionDetail(context, session),
@@ -236,6 +252,108 @@ class _SessionListCard extends StatelessWidget {
           : null,
       null => null,
     };
+  }
+}
+
+class _BookmarkListCard extends StatelessWidget {
+  final VitalsBookmark bookmark;
+  const _BookmarkListCard({required this.bookmark});
+
+  @override
+  Widget build(BuildContext context) {
+    final dt = bookmark.timestamp;
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final period = dt.hour < 12 ? 'am' : 'pm';
+    final min = dt.minute.toString().padLeft(2, '0');
+    final timeStr = '${dt.month}/${dt.day}  $h:$min $period';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: BioVoltColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: BioVoltColors.teal.withAlpha(15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BioVoltColors.teal.withAlpha(60)),
+            ),
+            child: const Icon(Icons.bookmark_rounded,
+                size: 16, color: BioVoltColors.teal),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bookmark.note ?? 'Vitals snapshot',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: BioVoltColors.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      if (bookmark.hrBpm != null)
+                        _miniChip(
+                            'HR', bookmark.hrBpm!.toStringAsFixed(0)),
+                      if (bookmark.hrvMs != null)
+                        _miniChip(
+                            'HRV', '${bookmark.hrvMs!.toStringAsFixed(0)}ms'),
+                      if (bookmark.gsrUs != null)
+                        _miniChip(
+                            'GSR', '${bookmark.gsrUs!.toStringAsFixed(1)}\u00B5S'),
+                      if (bookmark.spo2Percent != null)
+                        _miniChip('SpO2',
+                            '${bookmark.spo2Percent!.toStringAsFixed(0)}%'),
+                      Text(
+                        timeStr,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          color: BioVoltColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniChip(String label, String value) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: BioVoltColors.background,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: Text(
+        '$label $value',
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 9,
+          color: BioVoltColors.textSecondary,
+        ),
+      ),
+    );
   }
 }
 
