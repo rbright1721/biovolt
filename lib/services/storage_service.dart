@@ -51,6 +51,7 @@ class StorageService {
     'bloodwork',
     'session_templates',
     'active_protocols',
+    'vitals_bookmarks',
   ];
 
   bool _initialized = false;
@@ -77,18 +78,20 @@ class StorageService {
 
   /// Wipe all Hive box files if the schema version has changed.
   Future<void> _migrateIfNeeded() async {
+    // On web, Hive uses IndexedDB — deleteBoxFromDisk and untyped
+    // open+clear both conflict with subsequent typed opens.
+    // Skip migration on web; boxes are ephemeral per browser session anyway.
+    if (kIsWeb) return;
+
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getInt(_schemaKey) ?? 0;
 
     if (stored < _schemaVersion) {
       debugPrint(
           'Schema upgrade: $stored \u2192 $_schemaVersion \u2014 wiping Hive boxes');
-      // Delete each box individually — more reliable than deleteFromDisk
       for (final name in _boxNames) {
         try {
-          if (await Hive.boxExists(name)) {
-            await Hive.deleteBoxFromDisk(name);
-          }
+          await Hive.deleteBoxFromDisk(name);
         } catch (e) {
           debugPrint('Failed to delete box $name: $e');
         }
@@ -117,10 +120,12 @@ class StorageService {
     } catch (e) {
       // Nuclear option — if boxes are corrupt, wipe everything and retry
       debugPrint('Hive box open failed: $e \u2014 nuking all data');
-      for (final name in _boxNames) {
-        try {
-          await Hive.deleteBoxFromDisk(name);
-        } catch (_) {}
+      if (!kIsWeb) {
+        for (final name in _boxNames) {
+          try {
+            await Hive.deleteBoxFromDisk(name);
+          } catch (_) {}
+        }
       }
       // Retry opens — these will create fresh empty boxes
       _sessionsBox = await Hive.openBox<Session>('sessions');

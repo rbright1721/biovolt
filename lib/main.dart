@@ -29,7 +29,16 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: 'AIzaSyBPlaceholderWebApiKey',
+      authDomain: 'biovolt.firebaseapp.com',
+      projectId: 'biovolt',
+      storageBucket: 'biovolt.firebasestorage.app',
+      messagingSenderId: '551736633719',
+      appId: '1:551736633719:web:placeholder',
+    ),
+  );
 
   final storageService = StorageService();
   await storageService.init();

@@ -18,7 +18,7 @@
         android:maxSdkVersion="30" />
 
     <application
-        android:label="biovolt_temp"
+        android:label="BioVolt"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

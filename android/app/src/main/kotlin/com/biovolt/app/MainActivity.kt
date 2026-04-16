@@ -1,4 +1,4 @@
-package com.biovolt.biovolt_temp
+package com.biovolt.app
 
 import io.flutter.embedding.android.FlutterActivity
 

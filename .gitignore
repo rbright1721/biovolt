@@ -43,3 +43,19 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase Functions secrets
+functions/.env
+functions/.env.local
+
+# Node modules
+node_modules/
+functions/node_modules/
+functions/package-lock.json
+
+# Backend proxy
+backend/node_modules/
+backend/.env
+
+# Firebase config (contains API keys)
+android/app/google-services.json
