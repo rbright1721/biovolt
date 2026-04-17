@@ -30,6 +30,13 @@ class GsrUpdated extends SensorsEvent {
   List<Object?> get props => [value];
 }
 
+class GsrBaselineShiftUpdated extends SensorsEvent {
+  final double value;
+  GsrBaselineShiftUpdated(this.value);
+  @override
+  List<Object?> get props => [value];
+}
+
 class TemperatureUpdated extends SensorsEvent {
   final double value;
   TemperatureUpdated(this.value);

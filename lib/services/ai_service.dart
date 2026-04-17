@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/ai_analysis.dart';
 import 'storage_service.dart';
@@ -62,13 +63,14 @@ class AiService {
   /// JSON response into [AiAnalysis], saves to [StorageService], and returns it.
   Future<AiAnalysis> analyzeSession(String sessionId, String prompt,
       {required String systemPrompt, bool ouraContextUsed = false}) async {
-    final responseText = await _callClaude(
-      systemPrompt: systemPrompt,
-      userPrompt: prompt,
-      maxTokens: 2000,
-    );
-
+    String responseText = '';
     try {
+      responseText = await _callClaude(
+        systemPrompt: systemPrompt,
+        userPrompt: prompt,
+        maxTokens: 2000,
+      );
+
       final parsed = _parseAnalysisJson(responseText);
       final analysis = AiAnalysis(
         sessionId: sessionId,
@@ -88,10 +90,18 @@ class AiService {
         ouraContextUsed: ouraContextUsed,
       );
 
+      debugPrint(
+          'AiAnalysis parsed successfully: ${analysis.sessionId}');
+      debugPrint('Insights count: ${analysis.insights.length}');
+
       await StorageService().saveAiAnalysis(analysis);
       return analysis;
-    } catch (_) {
-      // Parse failure — return partial AiAnalysis with raw text
+    } catch (e, stack) {
+      debugPrint('analyzeSession parse error: $e');
+      debugPrint('Stack: $stack');
+
+      // Any failure (network, cast, parse) — return partial AiAnalysis so
+      // the bloc still receives a result and the UI stops spinning.
       final analysis = AiAnalysis(
         sessionId: sessionId,
         generatedAt: DateTime.now(),
@@ -102,8 +112,13 @@ class AiService {
         anomalies: const [],
         correlationsDetected: const [],
         protocolRecommendations: const [],
-        flags: ['AI response could not be parsed as structured JSON'],
-        trendSummary: responseText,
+        flags: [
+          'AI analysis failed: $e',
+          if (responseText.isNotEmpty)
+              'Raw response preserved in trendSummary',
+        ],
+        trendSummary:
+            responseText.isNotEmpty ? responseText : 'No response received.',
         confidence: 0.0,
         ouraContextUsed: ouraContextUsed,
       );
@@ -157,6 +172,55 @@ class AiService {
   }
 
   // ---------------------------------------------------------------------------
+  // Health journal chat
+  // ---------------------------------------------------------------------------
+
+  /// Send a health journal message and get AI response grounded in PubMed.
+  /// Calls the `journalChat` Cloud Function, which handles keyword
+  /// extraction, PubMed search, and Claude call server-side.
+  /// Returns a map with `response` (String) and `researchGrounded` (bool).
+  Future<Map<String, dynamic>> sendJournalMessage({
+    required String userMessage,
+    required String conversationContext,
+    required String biologicalContext,
+  }) async {
+    try {
+      final callable = FirebaseFunctions
+          .instanceFor(region: 'us-central1')
+          .httpsCallable(
+            'journalChat',
+            options: HttpsCallableOptions(
+              timeout: const Duration(seconds: 40),
+            ),
+          );
+
+      final result = await callable.call({
+        'userMessage': userMessage,
+        'conversationContext': conversationContext,
+        'biologicalContext': biologicalContext,
+      });
+
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final response = data['response'] as String? ?? '';
+      final researchUsed = data['researchUsed'] as bool? ?? false;
+      if (researchUsed) {
+        debugPrint('Journal response grounded in PubMed research');
+      }
+      return {
+        'response': response,
+        'researchGrounded': researchUsed,
+      };
+    } catch (e) {
+      debugPrint('Journal AI error: $e');
+      return {
+        'response':
+            'Could not reach AI. Check your connection and try again.',
+        'researchGrounded': false,
+      };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Internal — Claude call via Cloud Function
   // ---------------------------------------------------------------------------
 
@@ -171,7 +235,7 @@ class AiService {
         options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
       );
 
-      final result = await callable.call<Map<String, dynamic>>({
+      final result = await callable.call({
         'model': _claudeModel,
         'max_tokens': maxTokens,
         'system': systemPrompt,
@@ -180,17 +244,28 @@ class AiService {
         ],
       });
 
-      final data = result.data;
+      debugPrint(
+          'analyzeSession raw result type: ${result.data.runtimeType}');
+      debugPrint('analyzeSession raw result: ${result.data}');
+
+      // On Android, the callable plugin coerces the top-level map to
+      // Map<String, dynamic> but leaves nested maps inside lists as
+      // Map<Object?, Object?>. Re-wrap them with Map.from to be safe.
+      final rawData = result.data;
+      if (rawData is! Map) return '';
+      final data = Map<String, dynamic>.from(rawData);
 
       // Handle Anthropic errors forwarded by the function
       if (data.containsKey('error')) {
         throw Exception('AI API error: ${data['error']}');
       }
 
-      final content = data['content'] as List<dynamic>?;
-      if (content != null && content.isNotEmpty) {
-        return (content.first as Map<String, dynamic>)['text'] as String? ??
-            '';
+      final content = data['content'];
+      if (content is List && content.isNotEmpty) {
+        final first = content.first;
+        if (first is Map) {
+          return (first['text'] as String?) ?? '';
+        }
       }
       return '';
     } on FirebaseFunctionsException catch (e) {

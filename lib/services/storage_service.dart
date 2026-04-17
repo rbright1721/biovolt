@@ -14,6 +14,7 @@ import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/sleep_record.dart';
 import '../models/active_protocol.dart';
+import '../models/health_journal_entry.dart';
 import '../models/vitals_bookmark.dart';
 import '../models/session_template.dart';
 import '../models/user_profile.dart';
@@ -34,6 +35,7 @@ class StorageService {
   Box<SessionTemplate>? _sessionTemplatesBox;
   Box<ActiveProtocol>? _activeProtocolsBox;
   Box<String>? _bookmarksBox;
+  Box<String>? _journalBox;
 
   // Bump this whenever TypeAdapter IDs or model shapes change.
   // Forces a full Hive wipe on devices with stale data.
@@ -52,6 +54,7 @@ class StorageService {
     'session_templates',
     'active_protocols',
     'vitals_bookmarks',
+    'health_journal',
   ];
 
   bool _initialized = false;
@@ -117,6 +120,7 @@ class StorageService {
       _activeProtocolsBox =
           await Hive.openBox<ActiveProtocol>('active_protocols');
       _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
+      _journalBox = await Hive.openBox<String>('health_journal');
     } catch (e) {
       // Nuclear option — if boxes are corrupt, wipe everything and retry
       debugPrint('Hive box open failed: $e \u2014 nuking all data');
@@ -143,6 +147,7 @@ class StorageService {
       _activeProtocolsBox =
           await Hive.openBox<ActiveProtocol>('active_protocols');
       _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
+      _journalBox = await Hive.openBox<String>('health_journal');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_schemaKey, _schemaVersion);
@@ -285,6 +290,10 @@ class StorageService {
   AiAnalysis? getAiAnalysis(String sessionId) =>
       _aiAnalysesBox?.get(sessionId);
 
+  Future<void> deleteAiAnalysis(String sessionId) async {
+    await _aiAnalysesBox?.delete(sessionId);
+  }
+
   // ---------------------------------------------------------------------------
   // Oura Daily Records
   // ---------------------------------------------------------------------------
@@ -397,6 +406,7 @@ class StorageService {
     await _sessionTemplatesBox?.clear();
     await _activeProtocolsBox?.clear();
     await _bookmarksBox?.clear();
+    await _journalBox?.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -512,5 +522,33 @@ class StorageService {
         .where(
             (b) => !b.timestamp.isBefore(from) && !b.timestamp.isAfter(to))
         .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Health Journal
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveJournalEntry(HealthJournalEntry entry) async {
+    await _journalBox!.put(entry.id, jsonEncode(entry.toJson()));
+  }
+
+  List<HealthJournalEntry> getAllJournalEntries() {
+    return _journalBox!.values
+        .map((s) => HealthJournalEntry.fromJson(
+            jsonDecode(s) as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  List<HealthJournalEntry> getJournalEntriesInRange(
+      DateTime from, DateTime to) {
+    return getAllJournalEntries()
+        .where((e) =>
+            !e.timestamp.isBefore(from) && !e.timestamp.isAfter(to))
+        .toList();
+  }
+
+  Future<void> updateJournalEntry(HealthJournalEntry entry) async {
+    await _journalBox!.put(entry.id, jsonEncode(entry.toJson()));
   }
 }

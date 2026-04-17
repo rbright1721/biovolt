@@ -15,6 +15,11 @@ class TrendsScreen extends StatefulWidget {
 }
 
 class _TrendsScreenState extends State<TrendsScreen> {
+  // Minimum session count before trend charts become statistically meaningful.
+  // Matches the existing 5-data-point threshold already used for the
+  // subjective-trends subsection (see _buildSubjectiveSection).
+  static const int _minSessionsForTrends = 5;
+
   int _selectedDays = 30;
   TrendData? _trendData;
   bool _loading = true;
@@ -133,8 +138,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
 
   Widget _buildContent() {
     final data = _trendData;
-    if (data == null || data.totalSessions == 0) {
-      return _buildEmptyState();
+    final sessionCount = data?.totalSessions ?? 0;
+    if (data == null || sessionCount < _minSessionsForTrends) {
+      return _buildInsufficientDataState(sessionCount, _minSessionsForTrends);
     }
 
     return ListView(
@@ -156,23 +162,77 @@ class _TrendsScreenState extends State<TrendsScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildInsufficientDataState(int sessionCount, int needed) {
+    final progress = (sessionCount / needed).clamp(0.0, 1.0);
+
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.show_chart_rounded, size: 48,
-              color: BioVoltColors.textSecondary.withAlpha(80)),
-          const SizedBox(height: 16),
-          Text('No session data yet',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.show_chart_rounded,
+              size: 48,
+              color: BioVoltColors.textSecondary.withAlpha(80),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Building your baseline',
               style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14, color: BioVoltColors.textSecondary)),
-          const SizedBox(height: 4),
-          Text('Complete sessions to see trends',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: BioVoltColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Complete $needed sessions to unlock\ntrend analysis and charts',
               style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  color: BioVoltColors.textSecondary.withAlpha(120))),
-        ],
+                fontSize: 11,
+                color: BioVoltColors.textSecondary,
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Container(
+              height: 4,
+              decoration: BoxDecoration(
+                color: BioVoltColors.surface,
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.teal,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$sessionCount of $needed sessions',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: BioVoltColors.teal,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Each session adds to your biological\nbaseline. Run breathwork, cold plunge,\nor meditation sessions to build data.',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: BioVoltColors.textSecondary.withAlpha(180),
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

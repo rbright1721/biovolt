@@ -19,6 +19,8 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
         emit(state.copyWith(hrv: e.value)));
     on<GsrUpdated>((e, emit) =>
         emit(state.copyWith(gsr: e.value)));
+    on<GsrBaselineShiftUpdated>((e, emit) =>
+        emit(state.copyWith(gsrBaselineShift: e.value)));
     on<TemperatureUpdated>((e, emit) =>
         emit(state.copyWith(temperature: e.value)));
     on<Spo2Updated>((e, emit) =>
@@ -40,6 +42,8 @@ class SensorsBloc extends Bloc<SensorsEvent, SensorsState> {
       _bleService.heartRateStream.listen((v) => add(HeartRateUpdated(v))),
       _bleService.hrvStream.listen((v) => add(HrvUpdated(v))),
       _bleService.gsrStream.listen((v) => add(GsrUpdated(v))),
+      _bleService.gsrBaselineShiftStream
+          .listen((v) => add(GsrBaselineShiftUpdated(v))),
       _bleService.temperatureStream.listen((v) => add(TemperatureUpdated(v))),
       _bleService.spo2Stream.listen((v) => add(Spo2Updated(v))),
       _bleService.lfHfStream.listen((v) => add(LfHfUpdated(v))),

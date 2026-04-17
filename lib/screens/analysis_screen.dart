@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../bloc/session/session_bloc.dart';
+import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/ai_analysis.dart';
@@ -62,8 +63,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           curr.analysis != null &&
           curr.analysis!.sessionId == widget.session.sessionId,
       listener: (context, state) {
+        debugPrint(
+            'BlocListener fired \u2014 analysis: ${state.analysis?.sessionId}');
         if (state.analysis != null) {
           setState(() => _analysis = state.analysis);
+          debugPrint('Setting _analysis on screen: ${_analysis?.sessionId}');
         }
       },
       child: Scaffold(
@@ -146,8 +150,79 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: BioVoltColors.textSecondary,
+            ),
+            onPressed: _showDeleteDialog,
+          ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showDeleteDialog() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BioVoltColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: BioVoltColors.cardBorder),
+        ),
+        title: Text(
+          'Delete session?',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: BioVoltColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'This session and its AI analysis will be permanently removed.',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            color: BioVoltColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                color: BioVoltColors.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                color: const Color(0xFFE24B4A),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final storage = StorageService();
+    await storage.deleteSession(widget.session.sessionId);
+    await storage.deleteAiAnalysis(widget.session.sessionId);
+
+    if (!mounted) return;
+    context.read<SessionBloc>().add(SessionHistoryLoaded());
+    Navigator.of(context).popUntil(
+      (route) => route.isFirst || route.settings.name == '/sessions',
     );
   }
 

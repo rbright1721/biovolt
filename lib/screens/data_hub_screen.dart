@@ -12,6 +12,7 @@ import '../models/normalized_record.dart';
 import '../services/oura_sync_service.dart';
 import '../services/storage_service.dart';
 import 'bloodwork_screen.dart';
+import 'profile_screen.dart';
 
 class DataHubScreen extends StatefulWidget {
   const DataHubScreen({super.key});
@@ -212,61 +213,71 @@ class _DataHubScreenState extends State<DataHubScreen> {
   }
 
   Widget _buildBleCard(BioVoltConnector connector) {
-    final connected = connector.status == ConnectorStatus.connected;
+    final isBioVolt = connector.connectorId == 'esp32_biovolt';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BioVoltTheme.glassCard(
-        glowColor: connected ? BioVoltColors.teal : BioVoltColors.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: connected
-                      ? BioVoltColors.teal
-                      : BioVoltColors.amber,
-                  shape: BoxShape.circle,
-                  boxShadow: connected
-                      ? [
-                          BoxShadow(
-                            color: BioVoltColors.teal.withAlpha(100),
-                            blurRadius: 6,
-                          )
-                        ]
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  connector.displayName,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: BioVoltColors.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                connected ? 'CONNECTED' : 'SCANNING...',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: connected
-                      ? BioVoltColors.teal
-                      : BioVoltColors.amber,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
+    return BlocBuilder<SensorsBloc, SensorsState>(
+      buildWhen: (prev, curr) => prev.isConnected != curr.isConnected,
+      builder: (context, sensorsState) {
+        // BioVolt Pod's live status comes from SensorsBloc (same source the
+        // dashboard uses) — the connector's own status can lag the BLE
+        // subscription. Other BLE devices fall back to ConnectorStatus.
+        final connected = isBioVolt
+            ? sensorsState.isConnected
+            : connector.status == ConnectorStatus.connected;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BioVoltTheme.glassCard(
+            glowColor: connected ? BioVoltColors.teal : BioVoltColors.surface,
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: connected
+                          ? BioVoltColors.teal
+                          : BioVoltColors.amber,
+                      shape: BoxShape.circle,
+                      boxShadow: connected
+                          ? [
+                              BoxShadow(
+                                color: BioVoltColors.teal.withAlpha(100),
+                                blurRadius: 6,
+                              )
+                            ]
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      connector.displayName,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: BioVoltColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    connected ? 'LIVE' : 'SCANNING...',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: connected
+                          ? BioVoltColors.teal
+                          : BioVoltColors.amber,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
           const SizedBox(height: 4),
           Text(
             connector.supportedDataTypes
@@ -295,19 +306,21 @@ class _DataHubScreenState extends State<DataHubScreen> {
               },
             ),
           ],
-          if (!connected)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Make sure device is powered on and in range',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: BioVoltColors.textSecondary,
+              if (!connected)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Make sure device is powered on and in range',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: BioVoltColors.textSecondary,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -594,6 +607,7 @@ class _DataHubScreenState extends State<DataHubScreen> {
 
   Widget _buildManualSources() {
     final bloodworkCount = _storage.getAllBloodwork().length;
+    final protocolsCount = _storage.getAllActiveProtocols().length;
 
     return Column(
       children: [
@@ -613,9 +627,20 @@ class _DataHubScreenState extends State<DataHubScreen> {
         _manualSourceRow(
           icon: Icons.medication_rounded,
           label: 'Supplement Protocol',
-          status: 'Coming soon',
+          status: protocolsCount == 0
+              ? 'No active protocols'
+              : '$protocolsCount protocol${protocolsCount == 1 ? '' : 's'} active',
           actionLabel: '+ EDIT',
-          onAction: () => _comingSoon(),
+          onAction: () {
+            Navigator.of(context)
+                .push(
+                  MaterialPageRoute(
+                      builder: (_) => const ProfileScreen()),
+                )
+                .then((_) {
+              if (mounted) setState(() {});
+            });
+          },
         ),
         _manualSourceRow(
           icon: Icons.biotech_rounded,

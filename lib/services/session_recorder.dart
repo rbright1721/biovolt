@@ -284,14 +284,37 @@ class SessionRecorder {
     final hasKey = await _aiService.hasValidKey();
     if (!hasKey) return;
 
-    final prompt = await _promptBuilder.buildSessionPrompt(sessionId);
-    final analysis = await _aiService.analyzeSession(
-      sessionId,
-      prompt,
-      systemPrompt: PromptBuilder.systemPrompt,
-      ouraContextUsed: _promptBuilder.lastPromptUsedOura,
-    );
-    _analysisCompleteController.add(analysis);
+    try {
+      final prompt = await _promptBuilder.buildSessionPrompt(sessionId);
+      final analysis = await _aiService.analyzeSession(
+        sessionId,
+        prompt,
+        systemPrompt: PromptBuilder.systemPrompt,
+        ouraContextUsed: _promptBuilder.lastPromptUsedOura,
+      );
+      _analysisCompleteController.add(analysis);
+    } catch (e, stack) {
+      debugPrint('_runDeepAnalysis unexpected error: $e');
+      debugPrint('Stack: $stack');
+      // Emit a fallback analysis so the UI stops spinning.
+      final fallback = AiAnalysis(
+        sessionId: sessionId,
+        generatedAt: DateTime.now(),
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-5',
+        promptVersion: '1.0.0',
+        insights: const [],
+        anomalies: const [],
+        correlationsDetected: const [],
+        protocolRecommendations: const [],
+        flags: ['Deep analysis failed: $e'],
+        trendSummary: null,
+        confidence: 0.0,
+        ouraContextUsed: false,
+      );
+      await _storage.saveAiAnalysis(fallback);
+      _analysisCompleteController.add(fallback);
+    }
   }
 
   // ---------------------------------------------------------------------------

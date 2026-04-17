@@ -11,6 +11,7 @@ import 'config/theme.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/data_hub_screen.dart';
+import 'screens/journal_screen.dart';
 import 'screens/session_history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
@@ -150,6 +151,7 @@ class _MainShellState extends State<_MainShell> {
     final screens = [
       DashboardScreen(bleService: widget.bleService),
       const SessionHistoryScreen(),
+      JournalScreen(bleService: widget.bleService),
       TrendsScreen(trendAnalyst: widget.trendAnalyst),
       const DataHubScreen(),
       const SettingsScreen(),
@@ -221,6 +223,10 @@ class _MainShellState extends State<_MainShell> {
           BottomNavigationBarItem(
             icon: Icon(Icons.history_rounded),
             label: 'SESSIONS',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            label: 'JOURNAL',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.show_chart_rounded),

@@ -107,6 +107,27 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
       }
     }
 
+    // -- Health journal entries from last 48 hours --
+    buf.writeln();
+    buf.writeln('=== HEALTH JOURNAL (last 48 hours) ===');
+    final journalSince = sessionTime.subtract(const Duration(hours: 48));
+    final journalEntries =
+        _storage.getJournalEntriesInRange(journalSince, sessionTime);
+
+    if (journalEntries.isEmpty) {
+      buf.writeln(
+          'No journal entries in the 48 hours before this session.');
+    } else {
+      for (final e in journalEntries) {
+        buf.writeln('[${e.timestamp.toIso8601String()}]');
+        buf.writeln('  User: ${e.userMessage}');
+        buf.writeln('  AI: ${e.aiResponse}');
+        if (e.autoTags.isNotEmpty) {
+          buf.writeln('  Tags: ${e.autoTags.join(', ')}');
+        }
+      }
+    }
+
     // -- Last night's Oura data --
     buf.writeln();
     buf.writeln('=== LAST NIGHT (OURA) ===');
@@ -534,8 +555,10 @@ Be data-grounded. Reference specific numbers and dates. No generic advice.''';
         final dose = p.doseMcg > 0
             ? ' ${p.doseMcg.toStringAsFixed(0)}mcg'
             : '';
+        final route = p.route.isNotEmpty ? ' ${p.route}' : '';
+        final notes = p.notes != null ? ' \u2014 ${p.notes}' : '';
         buf.writeln(
-          '  ${p.name}$dose ${p.route} \u2014 day ${p.currentCycleDay} of ${p.cycleLengthDays}'
+          '  ${p.name}$dose$route \u2014 day ${p.currentCycleDay} of ${p.cycleLengthDays}$notes'
         );
       }
     } else if (ctx == null) {

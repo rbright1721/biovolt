@@ -92,34 +92,42 @@ class _BiquadLPF {
 }
 
 class BleService {
-  Stream<double> get heartRateStream   => _heartRateCtrl.stream;
-  Stream<double> get hrvStream         => _hrvCtrl.stream;
-  Stream<double> get gsrStream         => _gsrCtrl.stream;
-  Stream<double> get temperatureStream => _tempCtrl.stream;
-  Stream<double> get spo2Stream        => _spo2Ctrl.stream;
-  Stream<double> get lfHfStream        => _lfHfCtrl.stream;
-  Stream<double> get coherenceStream   => _coherenceCtrl.stream;
-  Stream<double> get ecgStream         => _ecgCtrl.stream;
-  Stream<double> get ppgStream         => _ppgCtrl.stream;
-  Stream<double> get gsrRawStream      => _gsrRawCtrl.stream;
-  Stream<bool>   get connectionStream  => _connectedCtrl.stream;
+  Stream<double> get heartRateStream       => _heartRateCtrl.stream;
+  Stream<double> get hrvStream             => _hrvCtrl.stream;
+  Stream<double> get gsrStream             => _gsrCtrl.stream;
+  Stream<double> get gsrBaselineShiftStream => _gsrBaselineShiftCtrl.stream;
+  Stream<double> get temperatureStream     => _tempCtrl.stream;
+  Stream<double> get spo2Stream            => _spo2Ctrl.stream;
+  Stream<double> get lfHfStream            => _lfHfCtrl.stream;
+  Stream<double> get coherenceStream       => _coherenceCtrl.stream;
+  Stream<double> get ecgStream             => _ecgCtrl.stream;
+  Stream<double> get ppgStream             => _ppgCtrl.stream;
+  Stream<double> get gsrRawStream          => _gsrRawCtrl.stream;
+  Stream<bool>   get connectionStream      => _connectedCtrl.stream;
 
   /// Emits the current HRV source whenever it changes.
   /// UI can listen to show the ECG/PPG badge on the HRV card.
   Stream<String> get hrvSourceStream   => _hrvSourceCtrl.stream;
 
-  final _heartRateCtrl = StreamController<double>.broadcast();
-  final _hrvCtrl       = StreamController<double>.broadcast();
-  final _gsrCtrl       = StreamController<double>.broadcast();
-  final _tempCtrl      = StreamController<double>.broadcast();
-  final _spo2Ctrl      = StreamController<double>.broadcast();
-  final _lfHfCtrl      = StreamController<double>.broadcast();
-  final _coherenceCtrl = StreamController<double>.broadcast();
-  final _ecgCtrl       = StreamController<double>.broadcast();
-  final _ppgCtrl       = StreamController<double>.broadcast();
-  final _gsrRawCtrl    = StreamController<double>.broadcast();
-  final _connectedCtrl = StreamController<bool>.broadcast();
-  final _hrvSourceCtrl = StreamController<String>.broadcast();
+  final _heartRateCtrl         = StreamController<double>.broadcast();
+  final _hrvCtrl               = StreamController<double>.broadcast();
+  final _gsrCtrl               = StreamController<double>.broadcast();
+  final _gsrBaselineShiftCtrl  = StreamController<double>.broadcast();
+  final _tempCtrl              = StreamController<double>.broadcast();
+  final _spo2Ctrl              = StreamController<double>.broadcast();
+  final _lfHfCtrl              = StreamController<double>.broadcast();
+  final _coherenceCtrl         = StreamController<double>.broadcast();
+  final _ecgCtrl               = StreamController<double>.broadcast();
+  final _ppgCtrl               = StreamController<double>.broadcast();
+  final _gsrRawCtrl            = StreamController<double>.broadcast();
+  final _connectedCtrl         = StreamController<bool>.broadcast();
+  final _hrvSourceCtrl         = StreamController<String>.broadcast();
+
+  // ── GSR session baseline tracker ──────────────────────────────────────
+  // First ~3s of session = baseline window. After that, emit relative shift.
+  double _gsrSessionBaseline = 0.0;
+  int    _gsrBaselineSamples = 0;
+  static const int _gsrBaselineWindow = 150; // 150 samples @ 50Hz = 3s
 
   BluetoothDevice?    _device;
   StreamSubscription? _scanSub;
@@ -266,6 +274,13 @@ class BleService {
     _startScan();
   }
 
+  /// Reset GSR session baseline — call when a new session starts so the
+  /// next ~3 seconds re-establish the baseline window.
+  void resetGsrBaseline() {
+    _gsrSessionBaseline = 0.0;
+    _gsrBaselineSamples = 0;
+  }
+
   void dispose() {
     _running = false;
     _scanSub?.cancel();
@@ -275,6 +290,7 @@ class BleService {
     _heartRateCtrl.close();
     _hrvCtrl.close();
     _gsrCtrl.close();
+    _gsrBaselineShiftCtrl.close();
     _tempCtrl.close();
     _spo2Ctrl.close();
     _lfHfCtrl.close();
@@ -354,6 +370,21 @@ class BleService {
     _gsrRawCtrl.add(gsrRaw);
     final gsrUs = ((4095.0 - gsrRaw) / 4095.0) * 15.0 + 0.5;
     _gsrCtrl.add(gsrUs.clamp(0.5, 20.0));
+
+    // ── GSR baseline normalization ────────────────────────────────────
+    // First 3 seconds of session = baseline window
+    // After that, emit relative change from baseline
+    if (_gsrBaselineSamples < _gsrBaselineWindow) {
+      _gsrBaselineSamples++;
+      // Running average of baseline
+      _gsrSessionBaseline = (_gsrSessionBaseline * (_gsrBaselineSamples - 1) +
+          gsrUs) / _gsrBaselineSamples;
+    } else if (_gsrSessionBaseline > 0) {
+      // Relative shift: positive = more aroused than baseline
+      //                negative = calmer than baseline
+      final shift = gsrUs - _gsrSessionBaseline;
+      _gsrBaselineShiftCtrl.add(shift);
+    }
 
     // ── Temperature °C → °F
     _tempCtrl.add(packet.temperature * 9.0 / 5.0 + 32.0);
@@ -894,16 +925,46 @@ class BleService {
         sumSq += diff * diff;
       }
       final rmssd = math.sqrt(sumSq / (rrIntervals.length - 1));
-      _hrvCtrl.add(rmssd.clamp(0, 120));
+      _hrvCtrl.add(rmssd.clamp(0, 250));
 
-      // RR coefficient of variation as autonomic balance proxy
-      // Research: "LF/HF ratio should not be computed from PPG"
-      // Note: even with ECG, LF/HF from short segments is unreliable;
-      // CV-based proxy is more stable for real-time biofeedback
       final cv = _rrCoefficientOfVariation(rrIntervals);
-      final coherence = (100.0 - (cv * 500.0)).clamp(10.0, 100.0);
+
+      // ── Coherence: measures REGULARITY of oscillation pattern ─────────
+      // True coherence = smooth rhythmic HRV (sine-like) vs chaotic random
+      // Method: calculate CV of successive RR DIFFERENCES
+      // Regular oscillation → similar-sized swings → low diff CV → high coherence
+      // Chaotic pattern → erratic swings → high diff CV → low coherence
+      double coherence = 50.0; // default mid-range
+      if (rrIntervals.length >= 4) {
+        final diffs = <double>[];
+        for (int i = 1; i < rrIntervals.length; i++) {
+          diffs.add((rrIntervals[i] - rrIntervals[i - 1]).abs().toDouble());
+        }
+        final diffMean = diffs.reduce((a, b) => a + b) / diffs.length;
+        if (diffMean > 0) {
+          double diffVariance = 0;
+          for (final d in diffs) {
+            diffVariance += (d - diffMean) * (d - diffMean);
+          }
+          final diffCv = math.sqrt(diffVariance / diffs.length) / diffMean;
+          // Low diffCv (regular oscillation) = high coherence
+          // diffCv of 0 = perfect rhythm = 100
+          // diffCv of 1+ = chaotic = ~10
+          coherence = (100.0 - (diffCv * 90.0)).clamp(10.0, 100.0);
+        }
+      }
       _coherenceCtrl.add(coherence);
-      final lfHfProxy = (cv * 20.0).clamp(0.3, 3.0);
+
+      // ── LF/HF proxy: two-timescale autonomic balance ──────────────────
+      // Short-term (RMSSD-like) = HF = parasympathetic
+      // Longer-term drift = LF = sympathetic
+      // Proxy: compare recent CV to longer-window CV
+      // High short-term relative to long → parasympathetic → low LF/HF
+      // Low short-term relative to long → sympathetic → high LF/HF
+      //
+      // Practical: use CV with wider scaling so it doesn't peg at max
+      // cv range 0-0.25 maps to LF/HF 0.3-3.0
+      final lfHfProxy = (cv * 12.0).clamp(0.3, 3.0);
       _lfHfCtrl.add(lfHfProxy);
     }
 

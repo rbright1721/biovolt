@@ -782,7 +782,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${protocol.currentCycleDay} / ${protocol.cycleLengthDays} days',
+                  (protocol.cycleLengthDays == 0 ||
+                          protocol.cycleLengthDays == 365)
+                      ? 'Day ${protocol.currentCycleDay} \u2014 ongoing'
+                      : '${protocol.currentCycleDay} / ${protocol.cycleLengthDays} days',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     color: protocol.isActive
@@ -843,7 +846,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showAddProtocolSheet() {
     final nameCtrl = TextEditingController();
     final doseCtrl = TextEditingController();
-    final totalDaysCtrl = TextEditingController(text: '30');
+    final totalDaysCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
     String type = 'peptide';
     String route = 'subq';
     DateTime startDate = DateTime.now();
@@ -904,30 +908,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => setSheet(() => type = entry.$2)),
                 ],
               ),
-              const SizedBox(height: 8),
-              // Dose
-              _sheetField(doseCtrl, 'Daily dose (mcg, optional)'),
-              const SizedBox(height: 8),
-              // Route chips
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final entry in [
-                    ('Subq', 'subq'),
-                    ('Oral', 'oral'),
-                    ('Topical', 'topical'),
-                    ('Nasal', 'nasal'),
-                  ])
-                    _sheetChip(entry.$1,
-                        selected: route == entry.$2,
-                        onTap: () => setSheet(() => route = entry.$2)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Total days
-              _sheetField(totalDaysCtrl, 'Total days'),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               // Start date
               GestureDetector(
                 onTap: () async {
@@ -953,7 +934,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Row(
                   children: [
                     Text(
-                      'Started: ${startDate.month}/${startDate.day}/${startDate.year}',
+                      'Start date: ${startDate.month}/${startDate.day}/${startDate.year}',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
                         color: BioVoltColors.textSecondary,
@@ -965,20 +946,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
+              // Total days (optional)
+              _sheetField(totalDaysCtrl,
+                  'Total days (optional \u2014 leave blank for ongoing)'),
+              const SizedBox(height: 8),
+              // Dose
+              _sheetField(doseCtrl, 'Daily dose (mcg, optional)'),
+              const SizedBox(height: 8),
+              // Route chips
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in [
+                    ('Subq', 'subq'),
+                    ('Oral', 'oral'),
+                    ('Topical', 'topical'),
+                    ('Nasal', 'nasal'),
+                  ])
+                    _sheetChip(entry.$1,
+                        selected: route == entry.$2,
+                        onTap: () => setSheet(() => route = entry.$2)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Notes
+              _sheetField(notesCtrl,
+                  'Protocol notes (study, rationale, target dose...)'),
               const SizedBox(height: 14),
               // ADD button
               GestureDetector(
                 onTap: () {
                   if (nameCtrl.text.trim().isEmpty) return;
+                  // Blank total days → ongoing protocol. Use 365 as the
+                  // sentinel so ActiveProtocol.currentCycleDay's clamp(1, N)
+                  // stays valid (0 would crash: min > max).
+                  final parsedDays = int.tryParse(totalDaysCtrl.text.trim());
+                  final cycleLengthDays =
+                      (parsedDays == null || parsedDays <= 0) ? 365 : parsedDays;
+
                   final protocol = ActiveProtocol(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     name: nameCtrl.text.trim(),
                     type: type,
                     startDate: startDate,
-                    cycleLengthDays:
-                        int.tryParse(totalDaysCtrl.text) ?? 30,
+                    cycleLengthDays: cycleLengthDays,
                     doseMcg: double.tryParse(doseCtrl.text) ?? 0,
                     route: route,
+                    notes: notesCtrl.text.trim().isEmpty
+                        ? null
+                        : notesCtrl.text.trim(),
                     isActive: true,
                   );
                   _storage.saveActiveProtocol(protocol);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../bloc/session/session_bloc.dart';
+import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
 import '../models/session.dart';
@@ -109,12 +110,103 @@ class SessionHistoryScreen extends StatelessWidget {
           return _BookmarkListCard(bookmark: entry.item as VitalsBookmark);
         }
         final session = entry.item as Session;
-        return _SessionListCard(
-          session: session,
-          onTap: () => _showSessionDetail(context, session),
+        return Dismissible(
+          key: Key(session.sessionId),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            color: Colors.transparent,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFA32D2D).withAlpha(200),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'DELETE',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFF09595),
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+          ),
+          confirmDismiss: (direction) =>
+              _confirmDeleteDialog(context),
+          onDismissed: (direction) => _deleteSession(context, session),
+          child: _SessionListCard(
+            session: session,
+            onTap: () => _showSessionDetail(context, session),
+          ),
         );
       },
     );
+  }
+
+  Future<bool> _confirmDeleteDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BioVoltColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: BioVoltColors.cardBorder),
+        ),
+        title: Text(
+          'Delete session?',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: BioVoltColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'This session and its AI analysis will be permanently removed.',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            color: BioVoltColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                color: BioVoltColors.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                color: const Color(0xFFE24B4A),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _deleteSession(
+      BuildContext context, Session session) async {
+    final storage = StorageService();
+    await storage.deleteSession(session.sessionId);
+    await storage.deleteAiAnalysis(session.sessionId);
+    if (context.mounted) {
+      context.read<SessionBloc>().add(SessionHistoryLoaded());
+    }
   }
 
   void _showSessionDetail(BuildContext context, Session session) {

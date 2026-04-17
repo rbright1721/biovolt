@@ -6,6 +6,7 @@ class SensorsState extends Equatable {
   final double heartRate;
   final double hrv;
   final double gsr;
+  final double? gsrBaselineShift;
   final double temperature;
   final double spo2;
   final double lfHfRatio;
@@ -23,6 +24,7 @@ class SensorsState extends Equatable {
     this.heartRate = 0,
     this.hrv = 0,
     this.gsr = 0,
+    this.gsrBaselineShift,
     this.temperature = 0,
     this.spo2 = 0,
     this.lfHfRatio = 0,
@@ -36,6 +38,7 @@ class SensorsState extends Equatable {
     double? heartRate,
     double? hrv,
     double? gsr,
+    double? gsrBaselineShift,
     double? temperature,
     double? spo2,
     double? lfHfRatio,
@@ -48,6 +51,7 @@ class SensorsState extends Equatable {
       heartRate: heartRate ?? this.heartRate,
       hrv: hrv ?? this.hrv,
       gsr: gsr ?? this.gsr,
+      gsrBaselineShift: gsrBaselineShift ?? this.gsrBaselineShift,
       temperature: temperature ?? this.temperature,
       spo2: spo2 ?? this.spo2,
       lfHfRatio: lfHfRatio ?? this.lfHfRatio,
@@ -63,6 +67,7 @@ class SensorsState extends Equatable {
         heartRate,
         hrv,
         gsr,
+        gsrBaselineShift,
         temperature,
         spo2,
         lfHfRatio,
