@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#111318"
+    android:padding="12dp">
+
+    <!-- Header row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="BIOVOLT"
+            android:textColor="#00E5CC"
+            android:textSize="10sp"
+            android:letterSpacing="0.15"
+            android:fontFamily="monospace"/>
+
+        <TextView
+            android:id="@+id/widget_fasting_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FASTING"
+            android:textColor="#6B7280"
+            android:textSize="8sp"
+            android:letterSpacing="0.1"
+            android:fontFamily="monospace"/>
+    </LinearLayout>
+
+    <!-- Fasting timer - large -->
+    <TextView
+        android:id="@+id/widget_fasting_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="--:--"
+        android:textColor="#E5E7EB"
+        android:textSize="28sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="2dp"/>
+
+    <!-- Protocol row -->
+    <TextView
+        android:id="@+id/widget_protocol"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No active protocols"
+        android:textColor="#6B7280"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="4dp"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+
+    <!-- Last HRV -->
+    <TextView
+        android:id="@+id/widget_hrv"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#4B5563"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="2dp"/>
+
+</LinearLayout>

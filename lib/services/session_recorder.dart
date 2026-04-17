@@ -13,6 +13,7 @@ import '../models/session.dart';
 import 'ai_service.dart';
 import 'prompt_builder.dart';
 import 'storage_service.dart';
+import 'widget_service.dart';
 
 /// Manages the full lifecycle of an active biofeedback session.
 ///
@@ -161,6 +162,7 @@ class SessionRecorder {
     );
 
     await _storage.saveSession(finalSession);
+    unawaited(WidgetService.updateWidget());
     _activeSession = null;
     _recordBuffer.clear();
     _fullSessionRecords.clear();
@@ -247,6 +249,7 @@ class SessionRecorder {
     );
 
     _storage.saveSession(updated);
+    unawaited(WidgetService.updateWidget());
   }
 
   // ---------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +17,7 @@ import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
 import 'services/trend_analyst.dart';
+import 'services/widget_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +39,9 @@ void main() async {
 
   final storageService = StorageService();
   await storageService.init();
+
+  // Refresh the home-screen widget on cold start (fire-and-forget).
+  unawaited(WidgetService.updateWidget());
 
   final sessionStorage = SessionStorage(storageService);
 

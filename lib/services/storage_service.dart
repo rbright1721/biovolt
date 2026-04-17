@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'widget_service.dart';
 
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
@@ -353,6 +356,7 @@ class StorageService {
       lastMealTime: DateTime.now(),
     );
     await saveUserProfile(updated);
+    unawaited(WidgetService.updateWidget());
   }
 
   // ---------------------------------------------------------------------------
