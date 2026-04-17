@@ -5,9 +5,9 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#111318"
-    android:padding="12dp">
+    android:padding="14dp">
 
-    <!-- Header row -->
+    <!-- Row 1: BIOVOLT label + eating window status -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -15,39 +15,48 @@
         android:gravity="center_vertical">
 
         <TextView
-            android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="BIOVOLT"
             android:textColor="#00E5CC"
             android:textSize="10sp"
-            android:letterSpacing="0.15"
-            android:fontFamily="monospace"/>
+        android:fontFamily="monospace"/>
 
+        <!-- EAT · 12:00pm or FAST · until 12:00pm -->
         <TextView
-            android:id="@+id/widget_fasting_label"
+            android:id="@+id/widget_window_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="FASTING"
-            android:textColor="#6B7280"
-            android:textSize="8sp"
-            android:letterSpacing="0.1"
-            android:fontFamily="monospace"/>
+            android:text=""
+            android:textSize="9sp"
+            android:fontFamily="monospace"
+            android:textColor="#6B7280"/>
     </LinearLayout>
 
-    <!-- Fasting timer - large -->
+    <!-- Row 2: Fasting label -->
+    <TextView
+        android:id="@+id/widget_fasting_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="FASTING"
+        android:textColor="#4B5563"
+        android:textSize="8sp"
+android:fontFamily="monospace"
+        android:layout_marginTop="6dp"/>
+
+    <!-- Row 3: Fasting timer large -->
     <TextView
         android:id="@+id/widget_fasting_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="--:--"
+        android:text="--h --m"
         android:textColor="#E5E7EB"
-        android:textSize="28sp"
+        android:textSize="26sp"
         android:fontFamily="monospace"
-        android:layout_marginTop="2dp"/>
+        android:layout_marginTop="1dp"/>
 
-    <!-- Protocol row -->
+    <!-- Row 4: Protocol -->
     <TextView
         android:id="@+id/widget_protocol"
         android:layout_width="match_parent"
@@ -56,13 +65,13 @@
         android:textColor="#6B7280"
         android:textSize="9sp"
         android:fontFamily="monospace"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:maxLines="1"
         android:ellipsize="end"/>
 
-    <!-- Last HRV -->
+    <!-- Row 5: Customizable data slot -->
     <TextView
-        android:id="@+id/widget_hrv"
+        android:id="@+id/widget_data_slot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text=""
@@ -71,4 +80,68 @@
         android:fontFamily="monospace"
         android:layout_marginTop="2dp"/>
 
+    <!-- Spacer -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <!-- Row 6: Action buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <!-- I ate button -->
+        <TextView
+            android:id="@+id/widget_btn_ate"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="&#127869; I ATE"
+            android:textColor="#F59E0B"
+            android:textSize="9sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:padding="6dp"
+            android:background="#1A1F59E0"/>
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="match_parent"/>
+
+        <!-- Voice note button -->
+        <TextView
+            android:id="@+id/widget_btn_note"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="&#127908; NOTE"
+            android:textColor="#00E5CC"
+            android:textSize="9sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:padding="6dp"
+            android:background="#1100E5CC"/>
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="match_parent"/>
+
+        <!-- Start session button -->
+        <TextView
+            android:id="@+id/widget_btn_session"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="&#9654; SESSION"
+            android:textColor="#9CA3AF"
+            android:textSize="9sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:padding="6dp"
+            android:background="#181C23"/>
+
+    </LinearLayout>
 </LinearLayout>

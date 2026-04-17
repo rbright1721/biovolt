@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET"/>
 
@@ -58,6 +59,26 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/biovolt_widget_info"/>
         </receiver>
+
+        <receiver
+            android:name=".BioVoltWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.biovolt.app.ACTION_I_ATE"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- WorkManager initializer (androidx.startup) so the
+             periodic widget refresh task survives cold starts. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup" />
+        </provider>
     </application>
     <queries>
         <intent>

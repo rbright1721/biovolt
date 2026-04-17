@@ -21,7 +21,9 @@
       "Bash(./gradlew signingReport)",
       "Bash(firebase deploy *)",
       "Bash(firebase functions:log --only analyzeSession)",
-      "Bash(gcloud run *)"
+      "Bash(gcloud run *)",
+      "Bash(adb logcat *)",
+      "Bash(adb devices *)"
     ]
   }
 }

@@ -359,6 +359,39 @@ class StorageService {
     unawaited(WidgetService.updateWidget());
   }
 
+  /// Set the stored last-meal time to an explicit value. Used when the
+  /// home-screen widget's "I ate" button fires while the app is closed —
+  /// WidgetService reads the epoch written to SharedPreferences by the
+  /// broadcast receiver and mirrors it back into Hive.
+  Future<void> updateLastMealTimeExplicit(DateTime mealTime) async {
+    final existing = getUserProfile();
+    if (existing == null) return;
+
+    final updated = UserProfile(
+      userId: existing.userId,
+      createdAt: existing.createdAt,
+      biologicalSex: existing.biologicalSex,
+      dateOfBirth: existing.dateOfBirth,
+      heightCm: existing.heightCm,
+      weightKg: existing.weightKg,
+      healthGoals: existing.healthGoals,
+      knownConditions: existing.knownConditions,
+      baselineEstablished: existing.baselineEstablished,
+      aiProvider: existing.aiProvider,
+      aiModel: existing.aiModel,
+      preferredUnits: existing.preferredUnits,
+      aiCoachingStyle: existing.aiCoachingStyle,
+      mthfr: existing.mthfr,
+      apoe: existing.apoe,
+      comt: existing.comt,
+      fastingType: existing.fastingType,
+      eatWindowStartHour: existing.eatWindowStartHour,
+      eatWindowEndHour: existing.eatWindowEndHour,
+      lastMealTime: mealTime,
+    );
+    await saveUserProfile(updated);
+  }
+
   // ---------------------------------------------------------------------------
   // Connector States
   // ---------------------------------------------------------------------------

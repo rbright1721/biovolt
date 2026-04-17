@@ -15,7 +15,16 @@ import '../services/storage_service.dart';
 class JournalScreen extends StatefulWidget {
   final BleService bleService;
 
-  const JournalScreen({super.key, required this.bleService});
+  /// When true, start the voice-to-text session as soon as the screen
+  /// mounts. Used by the home-screen widget's "NOTE" button so a tap
+  /// lands the user straight into dictation.
+  final bool autoStartVoice;
+
+  const JournalScreen({
+    super.key,
+    required this.bleService,
+    this.autoStartVoice = false,
+  });
 
   @override
   State<JournalScreen> createState() => _JournalScreenState();
@@ -52,7 +61,13 @@ class _JournalScreenState extends State<JournalScreen> {
   void initState() {
     super.initState();
     _speech.initialize().then((v) {
-      if (mounted) setState(() => _speechAvailable = v);
+      if (!mounted) return;
+      setState(() => _speechAvailable = v);
+      // If opened from the home-screen widget's NOTE button, jump
+      // straight into listening once speech is ready.
+      if (v && widget.autoStartVoice && !_isListening) {
+        _toggleListening();
+      }
     });
     _loadEntries();
   }

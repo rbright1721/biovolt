@@ -8,6 +8,5 @@
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/biovolt_widget"
     android:widgetCategory="home_screen"
-    android:resizeMode="horizontal|vertical"
-    android:previewImage="@mipmap/ic_launcher">
+    android:resizeMode="horizontal|vertical">
 </appwidget-provider>

@@ -31,6 +31,16 @@ android {
         versionName = flutter.versionName
     }
 
+    // Force a single work-runtime version. Without this, workmanager
+    // (which pulls 2.8.1) collides with transitive 2.7.1-ktx and fails
+    // with a "duplicate class" error at D8/merge time.
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.work:work-runtime:2.9.0")
+            force("androidx.work:work-runtime-ktx:2.9.0")
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -42,4 +52,12 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required because BioVoltWidgetWorker.kt (in the :app module)
+    // imports androidx.work.Worker / WorkerParameters directly. The
+    // workmanager Flutter plugin pulls work-runtime into its own
+    // module, but that doesn't expose it on :app's compile classpath.
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

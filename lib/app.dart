@@ -9,6 +9,7 @@ import 'bloc/session/session_event.dart';
 import 'bloc/session/session_state.dart';
 import 'config/theme.dart';
 import 'screens/analysis_screen.dart';
+import 'main.dart' show appNavigatorKey;
 import 'screens/dashboard_screen.dart';
 import 'screens/data_hub_screen.dart';
 import 'screens/journal_screen.dart';
@@ -22,6 +23,7 @@ import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
 import 'services/trend_analyst.dart';
+import 'services/widget_service.dart';
 
 class BioVoltApp extends StatefulWidget {
   final SessionStorage sessionStorage;
@@ -43,14 +45,26 @@ class BioVoltApp extends StatefulWidget {
   State<BioVoltApp> createState() => _BioVoltAppState();
 }
 
-class _BioVoltAppState extends State<BioVoltApp> {
+class _BioVoltAppState extends State<BioVoltApp>
+    with WidgetsBindingObserver {
   bool _authChecked = false;
   bool _isSignedIn = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkAuth();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Sync the home-screen widget immediately when the app comes
+    // back to the foreground — catches any "I ate" taps or protocol
+    // edits that happened in a different session.
+    if (state == AppLifecycleState.resumed) {
+      WidgetService.updateWidget();
+    }
   }
 
   Future<void> _checkAuth() async {
@@ -66,6 +80,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.bleService.dispose();
     widget.sessionRecorder.dispose();
     super.dispose();
@@ -98,6 +113,7 @@ class _BioVoltAppState extends State<BioVoltApp> {
         title: 'BioVolt',
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
+        navigatorKey: appNavigatorKey,
         home: _buildHome(),
       ),
     );

@@ -9,7 +9,10 @@ import 'connectors/connector_esp32.dart';
 import 'connectors/connector_oura.dart';
 import 'connectors/connector_polar.dart';
 import 'connectors/connector_registry.dart';
+import 'screens/journal_screen.dart';
+import 'screens/pre_session_screen.dart';
 import 'services/ai_service.dart';
+import 'services/background_service.dart';
 import 'services/ble_service.dart';
 import 'services/oura_sync_service.dart';
 import 'services/prompt_builder.dart';
@@ -18,6 +21,11 @@ import 'services/session_storage.dart';
 import 'services/storage_service.dart';
 import 'services/trend_analyst.dart';
 import 'services/widget_service.dart';
+
+/// Global navigator key so the home-screen widget's MethodChannel
+/// handler can push new routes without a BuildContext.
+final GlobalKey<NavigatorState> appNavigatorKey =
+    GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +47,11 @@ void main() async {
 
   final storageService = StorageService();
   await storageService.init();
+
+  // Background WorkManager for periodic home-screen widget refresh.
+  // Must run after storage init so the first scheduled run has data.
+  await BackgroundService.init();
+  await BackgroundService.scheduleWidgetRefresh();
 
   // Refresh the home-screen widget on cold start (fire-and-forget).
   unawaited(WidgetService.updateWidget());
@@ -88,6 +101,30 @@ void main() async {
   // First-launch detection
   final profile = storageService.getUserProfile();
   final firstLaunch = profile == null;
+
+  // ── Widget action channel ──────────────────────────────────────────
+  // Android MainActivity forwards widget taps here. Use the global
+  // navigator key since this runs outside any widget tree.
+  const widgetChannel = MethodChannel('com.biovolt.app/widget');
+  widgetChannel.setMethodCallHandler((call) async {
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) return;
+    switch (call.method) {
+      case 'openVoiceNote':
+        navigator.push(MaterialPageRoute(
+          builder: (_) => JournalScreen(
+            bleService: bleService,
+            autoStartVoice: true,
+          ),
+        ));
+        break;
+      case 'openSessionLauncher':
+        navigator.push(MaterialPageRoute(
+          builder: (_) => PreSessionScreen(bleService: bleService),
+        ));
+        break;
+    }
+  });
 
   runApp(BioVoltApp(
     sessionStorage: sessionStorage,
