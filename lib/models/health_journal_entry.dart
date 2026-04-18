@@ -7,6 +7,7 @@ class HealthJournalEntry {
   final String? sessionId;
   final List<String> autoTags;
   final bool researchGrounded;
+  final String conversationId;
 
   final double? hrBpm;
   final double? hrvMs;
@@ -23,6 +24,7 @@ class HealthJournalEntry {
     this.sessionId,
     this.autoTags = const [],
     this.researchGrounded = false,
+    this.conversationId = 'default',
     this.hrBpm,
     this.hrvMs,
     this.gsrUs,
@@ -39,6 +41,7 @@ class HealthJournalEntry {
         'sessionId': sessionId,
         'autoTags': autoTags,
         'researchGrounded': researchGrounded,
+        'conversationId': conversationId,
         'hrBpm': hrBpm,
         'hrvMs': hrvMs,
         'gsrUs': gsrUs,
@@ -59,6 +62,7 @@ class HealthJournalEntry {
                 .toList() ??
             const [],
         researchGrounded: json['researchGrounded'] as bool? ?? false,
+        conversationId: json['conversationId'] as String? ?? 'default',
         hrBpm: (json['hrBpm'] as num?)?.toDouble(),
         hrvMs: (json['hrvMs'] as num?)?.toDouble(),
         gsrUs: (json['gsrUs'] as num?)?.toDouble(),
@@ -75,6 +79,7 @@ class HealthJournalEntry {
         sessionId: sessionId,
         autoTags: autoTags,
         researchGrounded: researchGrounded,
+        conversationId: conversationId,
         hrBpm: hrBpm,
         hrvMs: hrvMs,
         gsrUs: gsrUs,

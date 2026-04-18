@@ -588,4 +588,49 @@ class StorageService {
   Future<void> updateJournalEntry(HealthJournalEntry entry) async {
     await _journalBox!.put(entry.id, jsonEncode(entry.toJson()));
   }
+
+  List<HealthJournalEntry> getEntriesForConversation(
+      String conversationId) {
+    return getAllJournalEntries()
+        .where((e) => e.conversationId == conversationId)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  }
+
+  /// All unique conversation IDs with their latest entry timestamp and a
+  /// display title derived from the conversation's first user message.
+  List<({String id, String title, DateTime lastUpdated})>
+      getAllConversations() {
+    final entries = getAllJournalEntries();
+    final Map<String, HealthJournalEntry> latest = {};
+    final Map<String, HealthJournalEntry> earliest = {};
+    for (final e in entries) {
+      if (!latest.containsKey(e.conversationId) ||
+          e.timestamp.isAfter(latest[e.conversationId]!.timestamp)) {
+        latest[e.conversationId] = e;
+      }
+      if (!earliest.containsKey(e.conversationId) ||
+          e.timestamp.isBefore(earliest[e.conversationId]!.timestamp)) {
+        earliest[e.conversationId] = e;
+      }
+    }
+    return latest.entries.map((kv) => (
+          id: kv.key,
+          title: _conversationTitle(
+              kv.key, earliest[kv.key]!.userMessage),
+          lastUpdated: kv.value.timestamp,
+        ))
+        .toList()
+      ..sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
+  }
+
+  String _conversationTitle(String id, String firstMessage) {
+    if (id == 'default') return 'General';
+    final clean = firstMessage.replaceAll('\n', ' ').trim();
+    return clean.length > 40 ? '${clean.substring(0, 40)}...' : clean;
+  }
+
+  Future<String> createNewConversation() async {
+    return DateTime.now().millisecondsSinceEpoch.toString();
+  }
 }

@@ -183,6 +183,7 @@ class AiService {
     required String userMessage,
     required String conversationContext,
     required String biologicalContext,
+    bool researchMode = false,
   }) async {
     try {
       final callable = FirebaseFunctions
@@ -198,6 +199,7 @@ class AiService {
         'userMessage': userMessage,
         'conversationContext': conversationContext,
         'biologicalContext': biologicalContext,
+        'researchMode': researchMode,
       });
 
       final data = Map<String, dynamic>.from(result.data as Map);

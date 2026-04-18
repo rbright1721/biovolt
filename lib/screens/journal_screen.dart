@@ -42,6 +42,10 @@ class _JournalScreenState extends State<JournalScreen> {
   bool _isLoading = false;
   List<HealthJournalEntry> _entries = [];
 
+  String _activeConversationId = 'default';
+  bool _showConversationList = false;
+  bool _researchMode = false;
+
   static const List<String> _tagKeywords = [
     'nac',
     'bpc',
@@ -82,9 +86,19 @@ class _JournalScreenState extends State<JournalScreen> {
 
   void _loadEntries() {
     setState(() {
-      _entries = _storage.getAllJournalEntries();
+      _entries =
+          _storage.getEntriesForConversation(_activeConversationId);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  Future<void> _startNewConversation() async {
+    final id = await _storage.createNewConversation();
+    setState(() {
+      _activeConversationId = id;
+      _showConversationList = false;
+      _entries = [];
+    });
   }
 
   void _scrollToBottom() {
@@ -99,9 +113,8 @@ class _JournalScreenState extends State<JournalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Display oldest first in the list
-    final displayEntries =
-        _entries.reversed.toList(growable: false);
+    // _entries is already oldest-first from getEntriesForConversation.
+    final displayEntries = _entries;
 
     return Scaffold(
       backgroundColor: BioVoltColors.background,
@@ -110,23 +123,25 @@ class _JournalScreenState extends State<JournalScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: displayEntries.isEmpty && !_isLoading
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      controller: _scrollCtrl,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      itemCount: displayEntries.length +
-                          (_isLoading ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index >= displayEntries.length) {
-                          return _buildLoadingBubble();
-                        }
-                        return _buildEntry(displayEntries[index]);
-                      },
-                    ),
+              child: _showConversationList
+                  ? _buildConversationList()
+                  : displayEntries.isEmpty && !_isLoading
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          controller: _scrollCtrl,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          itemCount: displayEntries.length +
+                              (_isLoading ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index >= displayEntries.length) {
+                              return _buildLoadingBubble();
+                            }
+                            return _buildEntry(displayEntries[index]);
+                          },
+                        ),
             ),
-            _buildInputRow(),
+            if (!_showConversationList) _buildInputRow(),
           ],
         ),
       ),
@@ -139,36 +154,202 @@ class _JournalScreenState extends State<JournalScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(
-              Icons.chevron_left_rounded,
+          GestureDetector(
+            onTap: () => setState(
+                () => _showConversationList = !_showConversationList),
+            behavior: HitTestBehavior.opaque,
+            child: Icon(
+              _showConversationList
+                  ? Icons.close_rounded
+                  : Icons.menu_rounded,
               color: BioVoltColors.textSecondary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'HEALTH JOURNAL',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: BioVoltColors.teal,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _researchMode = !_researchMode),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _researchMode
+                    ? BioVoltColors.teal.withAlpha(30)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _researchMode
+                      ? BioVoltColors.teal.withAlpha(100)
+                      : BioVoltColors.cardBorder,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.science_rounded,
+                    size: 12,
+                    color: _researchMode
+                        ? BioVoltColors.teal
+                        : BioVoltColors.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'RESEARCH',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      color: _researchMode
+                          ? BioVoltColors.teal
+                          : BioVoltColors.textSecondary,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _startNewConversation,
+            behavior: HitTestBehavior.opaque,
+            child: const Icon(
+              Icons.add_rounded,
+              color: BioVoltColors.teal,
+              size: 22,
             ),
           ),
           const SizedBox(width: 4),
-          Text(
-            'HEALTH JOURNAL',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: BioVoltColors.teal,
-              letterSpacing: 2,
-            ),
-          ),
-          const Spacer(),
-          Icon(
-            Icons.chat_bubble_outline_rounded,
-            color: BioVoltColors.textSecondary.withAlpha(120),
-            size: 18,
-          ),
-          const SizedBox(width: 12),
         ],
       ),
     );
+  }
+
+  Widget _buildConversationList() {
+    final conversations = _storage.getAllConversations();
+    if (conversations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No conversations yet.\nTap + to start one.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              color: BioVoltColors.textSecondary,
+              height: 1.6,
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                'CONVERSATIONS',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: BioVoltColors.textSecondary,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: conversations.length,
+            separatorBuilder: (_, _) => const Divider(
+                color: BioVoltColors.cardBorder, height: 1),
+            itemBuilder: (context, i) {
+              final conv = conversations[i];
+              final isActive = conv.id == _activeConversationId;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _activeConversationId = conv.id;
+                    _showConversationList = false;
+                  });
+                  _loadEntries();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  color: Colors.transparent,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 14,
+                        color: isActive
+                            ? BioVoltColors.teal
+                            : BioVoltColors.textSecondary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              conv.title,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11,
+                                color: isActive
+                                    ? BioVoltColors.textPrimary
+                                    : BioVoltColors.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatTimeAgo(conv.lastUpdated),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                color: BioVoltColors.textSecondary
+                                    .withAlpha(150),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTimeAgo(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Widget _buildEmptyState() {
@@ -458,7 +639,7 @@ class _JournalScreenState extends State<JournalScreen> {
     return Container(
       padding: EdgeInsets.fromLTRB(
         12,
-        8,
+        0,
         12,
         8 + MediaQuery.of(context).viewInsets.bottom,
       ),
@@ -468,9 +649,34 @@ class _JournalScreenState extends State<JournalScreen> {
           top: BorderSide(color: BioVoltColors.cardBorder, width: 1),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
+          if (_researchMode)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 6),
+              color: BioVoltColors.teal.withAlpha(15),
+              child: Row(
+                children: [
+                  const Icon(Icons.science_rounded,
+                      size: 11, color: BioVoltColors.teal),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Research mode \u2014 searching PubMed for evidence',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: BioVoltColors.teal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
           Expanded(
             child: TextField(
               controller: _inputCtrl,
@@ -563,6 +769,8 @@ class _JournalScreenState extends State<JournalScreen> {
               ),
             ),
           ),
+            ],
+          ),
         ],
       ),
     );
@@ -604,6 +812,7 @@ class _JournalScreenState extends State<JournalScreen> {
       userMessage: text,
       conversationContext: conversationContext,
       biologicalContext: biologicalContext,
+      researchMode: _researchMode,
     );
     final aiResponse = result['response'] as String;
     final researchGrounded = result['researchGrounded'] as bool? ?? false;
@@ -619,6 +828,7 @@ class _JournalScreenState extends State<JournalScreen> {
       bookmarked: false,
       autoTags: autoTags,
       researchGrounded: researchGrounded,
+      conversationId: _activeConversationId,
       hrBpm: hrBpm,
       hrvMs: hrvMs,
       gsrUs: gsrUs,
@@ -631,7 +841,8 @@ class _JournalScreenState extends State<JournalScreen> {
     if (!mounted) return;
     setState(() {
       _isLoading = false;
-      _entries = _storage.getAllJournalEntries();
+      _entries =
+          _storage.getEntriesForConversation(_activeConversationId);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
@@ -644,6 +855,50 @@ class _JournalScreenState extends State<JournalScreen> {
     double? spo2Percent,
   }) {
     final buf = StringBuffer();
+
+    final profile = _storage.getUserProfile();
+    if (profile != null) {
+      final profileLines = <String>[];
+      if (profile.weightKg != null) {
+        profileLines.add('  Weight: ${profile.weightKg}kg');
+      }
+      final mthfr = profile.mthfr;
+      if (mthfr != null && mthfr.isNotEmpty && mthfr != 'Unknown') {
+        profileLines.add('  MTHFR: $mthfr');
+      }
+      final apoe = profile.apoe;
+      if (apoe != null && apoe.isNotEmpty && apoe != 'Unknown') {
+        profileLines.add('  APOE: $apoe');
+      }
+      if (profileLines.isNotEmpty) {
+        buf.writeln('User profile:');
+        for (final line in profileLines) {
+          buf.writeln(line);
+        }
+      }
+    }
+
+    final recentSessions = _storage.getAllSessions().take(3).toList();
+    if (recentSessions.isNotEmpty) {
+      buf.writeln('Recent sessions:');
+      for (final s in recentSessions) {
+        final hrv = s.biometrics?.computed?.hrvRmssdMs;
+        final type =
+            s.context?.activities.firstOrNull?.type ?? 'session';
+        final ago = DateTime.now().difference(s.createdAt).inHours;
+        final hrvPart = hrv != null
+            ? ', HRV ${hrv.toStringAsFixed(0)}ms'
+            : '';
+        buf.writeln('  ${ago}h ago: $type$hrvPart');
+      }
+    }
+
+    final bloodwork = _storage.getAllBloodwork();
+    if (bloodwork.isNotEmpty) {
+      final latest = bloodwork.first;
+      buf.writeln(
+          'Latest bloodwork: ${latest.labDate.toIso8601String().substring(0, 10)}');
+    }
 
     final protocols = _storage.getAllActiveProtocols();
     if (protocols.isNotEmpty) {
@@ -696,9 +951,11 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   String _buildConversationContext() {
-    // _entries is sorted newest first — take last 3 (most recent)
-    final recent = _entries.take(3).toList().reversed;
-    if (recent.isEmpty) return '';
+    // _entries is sorted oldest-first for this conversation; take the
+    // last 3 so the AI sees recent turns in order.
+    if (_entries.isEmpty) return '';
+    final start = _entries.length > 3 ? _entries.length - 3 : 0;
+    final recent = _entries.sublist(start);
     return recent
         .map((e) => 'User: ${e.userMessage}\nAI: ${e.aiResponse}')
         .join('\n\n');

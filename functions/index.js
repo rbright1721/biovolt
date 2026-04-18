@@ -217,7 +217,12 @@ exports.journalChat = onCall({
 
   console.log("journalChat called by uid:", request.auth.uid);
 
-  const { userMessage, conversationContext, biologicalContext } = request.data;
+  const {
+    userMessage,
+    conversationContext,
+    biologicalContext,
+    researchMode,
+  } = request.data;
 
   if (!userMessage) {
     throw new HttpsError("invalid-argument", "userMessage is required");
@@ -227,15 +232,20 @@ exports.journalChat = onCall({
     throw new HttpsError("internal", "API key not configured.");
   }
 
-  // Step 1: Detect keywords and search PubMed
+  // Step 1: Detect keywords and search PubMed. In research mode we
+  // always search — even if no strong health keywords surface — and
+  // pull more abstracts so the synthesis has more substrate.
   let researchContext = "";
   const keywords = extractHealthKeywords(userMessage);
 
-  if (keywords.length > 0) {
-    console.log("Health keywords detected:", keywords);
-    const query = keywords.slice(0, 3).join(" AND ");
-    console.log("PubMed query:", query);
-    const ids = await searchPubMed(query, 3);
+  if (keywords.length > 0 || researchMode) {
+    const query = researchMode && keywords.length === 0
+      ? userMessage.substring(0, 100)
+      : keywords.slice(0, 3).join(" AND ");
+    const maxResults = researchMode ? 5 : 3;
+    console.log("Research mode:", !!researchMode,
+      "keywords:", keywords, "query:", query);
+    const ids = await searchPubMed(query, maxResults);
     console.log("PubMed IDs found:", ids);
     if (ids.length > 0) {
       const abstracts = await fetchPubMedAbstracts(ids);
@@ -246,8 +256,36 @@ exports.journalChat = onCall({
     }
   }
 
-  // Step 2: Build system prompt
-  const systemPrompt = `You are a knowledgeable health optimization AI
+  // Step 2: Build system prompt — research mode gets a literature-synthesis
+  // framing; the default stays conversational.
+  const systemPrompt = researchMode
+    ? `You are a health research assistant helping the user explore the
+scientific literature. The user has a specific biological context
+and is asking a research question; your job is to synthesize PubMed
+evidence clearly and honestly.
+
+User biological context:
+${biologicalContext || "No biological context provided."}
+
+${researchContext ? `PUBMED RESEARCH:
+${researchContext}
+
+Synthesize these studies. Cite study numbers ("Study 1 found...").
+Note study quality — RCT vs observational vs case report vs review —
+whenever that shapes confidence in a claim. Connect findings back to
+the user's biological context when relevant. Be intellectually honest
+about what the evidence does and does not show; flag small-n studies,
+conflicts of interest cues (industry-funded), and mechanism-only work.
+` : "No PubMed results were retrieved for this query. Say so clearly \
+and reason from first principles rather than inventing citations."}
+
+Response rules:
+- Lead with what the evidence shows, not with reassurance
+- Cite by study number; never fabricate citations
+- Distinguish strong evidence from suggestive signals
+- 2-5 paragraphs
+- End with a bracketed takeaway`
+    : `You are a knowledgeable health optimization AI
 assistant integrated into BioVolt, a biometric tracking app.
 
 CRITICAL: Always prioritize the user's SPECIFIC biological context and
@@ -298,7 +336,7 @@ Response rules:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
-        max_tokens: 600,
+        max_tokens: researchMode ? 1200 : 600,
         system: systemPrompt,
         messages,
       }),

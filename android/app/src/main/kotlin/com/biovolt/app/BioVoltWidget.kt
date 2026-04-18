@@ -20,6 +20,15 @@ class BioVoltWidget : AppWidgetProvider() {
         }
     }
 
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = manager.getAppWidgetIds(
+            android.content.ComponentName(context, BioVoltWidget::class.java)
+        )
+        onUpdate(context, manager, ids)
+    }
+
     companion object {
         private const val TAG = "BioVoltWidget"
 
