@@ -28,6 +28,7 @@ dependencies:
   firebase_auth: ^5.5.1
   google_sign_in: ^6.2.1
   cloud_functions: ^5.2.1
+  cloud_firestore: ^5.0.0
   home_widget: ^0.7.0
   workmanager: ^0.6.0
 

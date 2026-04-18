@@ -1,6 +1,11 @@
+import 'dart:async' show unawaited;
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'firestore_sync.dart';
+import 'storage_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -53,12 +58,15 @@ class AuthService {
         try {
           final result = await currentUser.linkWithCredential(credential);
           debugPrint('Linked anonymous to Google: ${result.user?.uid}');
+          unawaited(FirestoreSync().syncAll(StorageService()));
           return result;
         } on FirebaseAuthException catch (e) {
           debugPrint('Link failed (${e.code}), signing in directly');
           if (e.code == 'credential-already-in-use' ||
               e.code == 'email-already-in-use') {
-            return await _auth.signInWithCredential(credential);
+            final result = await _auth.signInWithCredential(credential);
+            unawaited(FirestoreSync().syncAll(StorageService()));
+            return result;
           }
           rethrow;
         }
@@ -66,6 +74,7 @@ class AuthService {
 
       final result = await _auth.signInWithCredential(credential);
       debugPrint('Signed in: ${result.user?.uid}');
+      unawaited(FirestoreSync().syncAll(StorageService()));
       return result;
     } on FirebaseAuthException catch (e) {
       debugPrint(
@@ -80,7 +89,9 @@ class AuthService {
 
   /// Sign in anonymously as guest.
   Future<UserCredential> signInAnonymously() async {
-    return await _auth.signInAnonymously();
+    final result = await _auth.signInAnonymously();
+    unawaited(FirestoreSync().syncAll(StorageService()));
+    return result;
   }
 
   /// Sign out.
@@ -95,6 +106,7 @@ class AuthService {
     if (user == null) {
       final credential = await _auth.signInAnonymously();
       user = credential.user!;
+      unawaited(FirestoreSync().syncAll(StorageService()));
     }
     return user.uid;
   }
