@@ -61,6 +61,11 @@ class Esp32Connector implements BioVoltConnector {
     _bleService.start();
   }
 
+  /// Reset the GSR session baseline — the next ~3 seconds of samples
+  /// re-establish the baseline used for relative shift emission.
+  /// Call at the start of each biofeedback session.
+  void resetGsrBaseline() => _bleService.resetGsrBaseline();
+
   @override
   Future<void> revokeAuth() async {
     await disconnect();

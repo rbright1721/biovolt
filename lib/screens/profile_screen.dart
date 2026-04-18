@@ -1,9 +1,12 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/active_protocol.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -630,6 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         GestureDetector(
           onTap: () async {
             await _storage.updateLastMealTime();
+            unawaited(FirestoreSync().syncProfile(_storage));
             setState(() => _lastMealTime = DateTime.now());
           },
           child: Container(
@@ -808,6 +812,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             GestureDetector(
               onTap: () async {
                 await _storage.endProtocol(protocol.id);
+                unawaited(FirestoreSync().deleteProtocol(protocol.id));
                 _reloadProtocols();
               },
               child: Container(
@@ -1000,6 +1005,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     isActive: true,
                   );
                   _storage.saveActiveProtocol(protocol);
+                  unawaited(FirestoreSync().writeProtocol(protocol));
                   Navigator.of(ctx).pop();
                   _reloadProtocols();
                 },
@@ -1149,6 +1155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     await _storage.saveUserProfile(profile);
+    unawaited(FirestoreSync().syncProfile(_storage));
 
     if (mounted) {
       setState(() => _saving = false);

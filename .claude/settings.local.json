@@ -23,7 +23,16 @@
       "Bash(firebase functions:log --only analyzeSession)",
       "Bash(gcloud run *)",
       "Bash(adb logcat *)",
-      "Bash(adb devices *)"
+      "Bash(adb devices *)",
+      "Bash(node -c index.js)",
+      "Bash(firebase --version)",
+      "Bash(gcloud --version)",
+      "Bash(curl *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(node -e \"require\\('./index.js'\\); console.log\\('syntax OK'\\)\")",
+      "Bash(node -e \"require\\('C:/Users/jbrig/StudioProjects/biovolt/functions/index.js'\\); console.log\\('syntax OK'\\)\")",
+      "Bash(pushd C:/Users/jbrig/StudioProjects/biovolt)",
+      "Bash(popd)"
     ]
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +10,7 @@ import '../config/theme.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/vitals_bookmark.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 import 'analysis_screen.dart';
 
@@ -204,6 +207,7 @@ class SessionHistoryScreen extends StatelessWidget {
     final storage = StorageService();
     await storage.deleteSession(session.sessionId);
     await storage.deleteAiAnalysis(session.sessionId);
+    unawaited(FirestoreSync().deleteSession(session.sessionId));
     if (context.mounted) {
       context.read<SessionBloc>().add(SessionHistoryLoaded());
     }

@@ -1,7 +1,10 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/bloodwork.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -428,6 +431,7 @@ class _AddNewTabState extends State<_AddNewTab> {
     );
 
     await widget.storage.saveBloodwork(bloodwork);
+    unawaited(FirestoreSync().writeBloodwork(bloodwork));
     if (mounted) {
       setState(() => _saving = false);
       widget.onSaved();

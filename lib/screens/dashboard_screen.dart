@@ -9,6 +9,7 @@ import '../config/theme.dart';
 import '../models/signal_info.dart';
 import '../models/vitals_bookmark.dart';
 import '../services/ble_service.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/signal_card.dart';
@@ -500,6 +501,7 @@ class DashboardScreen extends StatelessWidget {
                               currentSpo2 > 0 ? currentSpo2 : null,
                         );
                         await _storage.saveBookmark(bookmark);
+                        unawaited(FirestoreSync().writeBookmark(bookmark));
                         if (ctx.mounted) Navigator.of(ctx).pop();
 
                         if (context.mounted) {

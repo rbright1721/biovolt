@@ -897,13 +897,6 @@ class BleService {
     final useEcg = ecgActive && _ecgRrIntervals.length >= 4;
     final rrIntervals = useEcg ? _ecgRrIntervals : _ppgRrIntervals;
 
-    // TODO: remove debug print after verifying ECG/PPG source selection
-    print('[VITALS] source=${useEcg ? "ECG" : "PPG"}'
-        '  ecgActive=$ecgActive'
-        '  ecgPeaks=$_ecgConfirmedPeaks'
-        '  ecgRRs=${_ecgRrIntervals.length}'
-        '  ppgRRs=${_ppgRrIntervals.length}');
-
     // Emit HRV source change
     final newSource = useEcg ? 'ecg' : 'ppg';
     if (newSource != _lastHrvSource) {

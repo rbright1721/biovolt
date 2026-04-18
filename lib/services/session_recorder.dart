@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
+import '../connectors/connector_esp32.dart';
 import '../connectors/connector_registry.dart';
 import 'auth_service.dart';
 import '../models/ai_analysis.dart';
@@ -11,6 +12,7 @@ import '../models/interventions.dart';
 import '../models/normalized_record.dart';
 import '../models/session.dart';
 import 'ai_service.dart';
+import 'firestore_sync.dart';
 import 'prompt_builder.dart';
 import 'storage_service.dart';
 import 'widget_service.dart';
@@ -101,6 +103,14 @@ class SessionRecorder {
     _recordBuffer.clear();
     _fullSessionRecords.clear();
 
+    // Re-establish GSR session baseline if the ESP32 is connected.
+    // First ~3s of samples will rebuild the baseline before relative
+    // shift values are emitted.
+    final esp32 = _connectorRegistry.get('esp32_biovolt');
+    if (esp32 is Esp32Connector) {
+      esp32.resetGsrBaseline();
+    }
+
     // Subscribe to merged live stream from all connectors
     _sensorSubscription =
         _connectorRegistry.mergedLiveStream.listen(_onRecord);
@@ -162,6 +172,7 @@ class SessionRecorder {
     );
 
     await _storage.saveSession(finalSession);
+    unawaited(FirestoreSync().writeSession(finalSession, _storage));
     unawaited(WidgetService.updateWidget());
     _activeSession = null;
     _recordBuffer.clear();
@@ -316,6 +327,7 @@ class SessionRecorder {
         ouraContextUsed: false,
       );
       await _storage.saveAiAnalysis(fallback);
+      unawaited(FirestoreSync().writeAiAnalysis(fallback));
       _analysisCompleteController.add(fallback);
     }
   }

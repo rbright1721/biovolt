@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +12,7 @@ import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/vitals_bookmark.dart';
 import '../services/ai_service.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -218,6 +221,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final storage = StorageService();
     await storage.deleteSession(widget.session.sessionId);
     await storage.deleteAiAnalysis(widget.session.sessionId);
+    unawaited(FirestoreSync().deleteSession(widget.session.sessionId));
 
     if (!mounted) return;
     context.read<SessionBloc>().add(SessionHistoryLoaded());

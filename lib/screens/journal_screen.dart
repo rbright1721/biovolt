@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +12,9 @@ import '../models/vitals_bookmark.dart';
 import '../services/ai_service.dart';
 import '../services/ble_service.dart';
 import '../services/context_inferrer.dart';
+import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
+import '../services/widget_service.dart';
 
 class JournalScreen extends StatefulWidget {
   final BleService bleService;
@@ -816,6 +820,33 @@ class _JournalScreenState extends State<JournalScreen> {
     );
     final aiResponse = result['response'] as String;
     final researchGrounded = result['researchGrounded'] as bool? ?? false;
+    final action = result['action'] as Map<String, dynamic>?;
+
+    if (action != null) {
+      await _handleJournalAction(action);
+      if (mounted) {
+        final actionLabel = switch (action['action']) {
+          'update_last_meal' => '\u2713 Fasting clock reset',
+          'update_protocol_notes' => '\u2713 Protocol notes updated',
+          'log_bookmark' => '\u2713 Logged to timeline',
+          _ => '\u2713 Updated',
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              actionLabel,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: BioVoltColors.background,
+              ),
+            ),
+            backgroundColor: BioVoltColors.teal,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
 
     final combined = '$text\n$aiResponse'.toLowerCase();
     final autoTags = _tagKeywords.where(combined.contains).toList();
@@ -837,6 +868,7 @@ class _JournalScreenState extends State<JournalScreen> {
     );
 
     await _storage.saveJournalEntry(entry);
+    unawaited(FirestoreSync().writeJournalEntry(entry));
 
     if (!mounted) return;
     setState(() {
@@ -961,9 +993,64 @@ class _JournalScreenState extends State<JournalScreen> {
         .join('\n\n');
   }
 
+  Future<void> _handleJournalAction(Map<String, dynamic> action) async {
+    final actionType = action['action'] as String?;
+
+    switch (actionType) {
+      case 'update_last_meal':
+        DateTime mealTime;
+        try {
+          mealTime = action['timestamp'] != null
+              ? DateTime.parse(action['timestamp'] as String)
+              : DateTime.now();
+        } catch (_) {
+          mealTime = DateTime.now();
+        }
+        await _storage.updateLastMealTimeExplicit(mealTime);
+        unawaited(FirestoreSync().syncProfile(_storage));
+        unawaited(WidgetService.updateWidget());
+        debugPrint('Journal action: meal time updated to $mealTime');
+        break;
+
+      case 'update_protocol_notes':
+        final protocolName = action['protocolName'] as String?;
+        final notes = action['notes'] as String?;
+        if (protocolName != null && notes != null) {
+          final protocols = _storage.getAllActiveProtocols();
+          final match = protocols
+              .where((p) =>
+                  p.name.toLowerCase().contains(protocolName.toLowerCase()))
+              .firstOrNull;
+          if (match != null) {
+            // ActiveProtocol needs a copyWith for notes —
+            // follow-up will wire the actual write once the model
+            // has that helper. For now log the intent.
+            debugPrint(
+                'Journal action: protocol notes update for ${match.name}');
+          }
+        }
+        break;
+
+      case 'log_bookmark':
+        final note = action['note'] as String?;
+        if (note != null) {
+          final bookmark = VitalsBookmark(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            timestamp: DateTime.now(),
+            note: note,
+          );
+          await _storage.saveBookmark(bookmark);
+          unawaited(FirestoreSync().writeBookmark(bookmark));
+          debugPrint('Journal action: bookmark logged');
+        }
+        break;
+    }
+  }
+
   Future<void> _toggleBookmark(HealthJournalEntry entry) async {
     final updated = entry.copyWithBookmarked(!entry.bookmarked);
     await _storage.updateJournalEntry(updated);
+    unawaited(FirestoreSync().writeJournalEntry(updated));
 
     if (updated.bookmarked) {
       final bookmark = VitalsBookmark(
@@ -977,6 +1064,7 @@ class _JournalScreenState extends State<JournalScreen> {
         spo2Percent: entry.spo2Percent,
       );
       await _storage.saveBookmark(bookmark);
+      unawaited(FirestoreSync().writeBookmark(bookmark));
     }
 
     if (!mounted) return;

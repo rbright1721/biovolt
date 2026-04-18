@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/ai_analysis.dart';
+import 'firestore_sync.dart';
 import 'storage_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,7 @@ class AiService {
       debugPrint('Insights count: ${analysis.insights.length}');
 
       await StorageService().saveAiAnalysis(analysis);
+      unawaited(FirestoreSync().writeAiAnalysis(analysis));
       return analysis;
     } catch (e, stack) {
       debugPrint('analyzeSession parse error: $e');
@@ -124,6 +126,7 @@ class AiService {
       );
 
       await StorageService().saveAiAnalysis(analysis);
+      unawaited(FirestoreSync().writeAiAnalysis(analysis));
       return analysis;
     }
   }
@@ -205,12 +208,20 @@ class AiService {
       final data = Map<String, dynamic>.from(result.data as Map);
       final response = data['response'] as String? ?? '';
       final researchUsed = data['researchUsed'] as bool? ?? false;
+      final rawAction = data['action'];
+      final action = rawAction is Map
+          ? Map<String, dynamic>.from(rawAction)
+          : null;
       if (researchUsed) {
         debugPrint('Journal response grounded in PubMed research');
+      }
+      if (action != null) {
+        debugPrint('Journal action received: ${action['action']}');
       }
       return {
         'response': response,
         'researchGrounded': researchUsed,
+        'action': action,
       };
     } catch (e) {
       debugPrint('Journal AI error: $e');

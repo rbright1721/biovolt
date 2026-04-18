@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../connectors/connector_base.dart';
@@ -99,6 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _buildDataSection(),
                   const SizedBox(height: 24),
                   _buildAccountSection(),
+                  const SizedBox(height: 24),
+                  _buildMcpSection(),
                   const SizedBox(height: 24),
                   _buildAboutSection(),
                   const SizedBox(height: 40),
@@ -644,6 +648,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // MCP (temporary — remove after Claude.ai connector is live)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildMcpSection() {
+    return _Section(
+      title: 'MCP / CLAUDE.AI',
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BioVoltTheme.glassCard(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Copy Firebase tokens to configure Claude.ai '
+                'custom connector.',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: BioVoltColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: _copyMcpTokens,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: BioVoltColors.teal.withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: BioVoltColors.teal.withAlpha(120), width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'COPY FIREBASE TOKEN (MCP SETUP)',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: BioVoltColors.teal,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copyMcpTokens() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not signed in')),
+        );
+      }
+      return;
+    }
+
+    final idToken = await user.getIdToken(true);
+    final refreshToken = user.refreshToken;
+
+    await Clipboard.setData(ClipboardData(text: idToken ?? ''));
+
+    debugPrint('=== BIOVOLT MCP TOKENS ===');
+    debugPrint('ID Token: $idToken');
+    debugPrint('Refresh Token: $refreshToken');
+    debugPrint('=========================');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'ID token copied \u2014 check debug console for refresh token'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
