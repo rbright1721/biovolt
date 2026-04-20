@@ -15,6 +15,9 @@ class EventTypes {
   static const profileFieldChanged = 'profile.field_changed';
   static const profileGeneticMarkerAdded = 'profile.genetic_marker_added';
   static const profileBloodworkAdded = 'profile.bloodwork_added';
+  // Added for deleteBloodwork — deletions need their own type so the log
+  // doesn't conflate creations and removals.
+  static const profileBloodworkRemoved = 'profile.bloodwork_removed';
 
   // -- Protocol ---------------------------------------------------------
   static const protocolItemAdded = 'protocol.item_added';
@@ -31,6 +34,16 @@ class EventTypes {
   static const sessionStarted = 'session.started';
   static const sessionEnded = 'session.ended';
   static const sessionAnnotationAdded = 'session.annotation_added';
+  // Added for deleteSession — a deleted session is a distinct signal
+  // from an ended one (ended = completed, discarded = removed).
+  static const sessionDiscarded = 'session.discarded';
+
+  // -- Session templates ------------------------------------------------
+  // Templates are reusable session recipes, not sessions themselves.
+  // Added as a sub-domain so timeline consumers can filter them out.
+  static const sessionTemplateSaved = 'session.template_saved';
+  static const sessionTemplateDeleted = 'session.template_deleted';
+  static const sessionTemplateUsed = 'session.template_used';
 
   // -- Sensor samples ---------------------------------------------------
   static const hrSample = 'hr.sample';
@@ -41,9 +54,14 @@ class EventTypes {
   static const temperatureSample = 'temperature.sample';
 
   // -- Devices ----------------------------------------------------------
+  // The specific types below are reserved for user-initiated actions.
+  // Automatic BLE reconnects and connector-registry bookkeeping emit
+  // [deviceStateChanged] instead, so the log captures every persisted
+  // state write without burying genuine user actions in noise.
   static const deviceConnected = 'device.connected';
   static const deviceDisconnected = 'device.disconnected';
   static const devicePaired = 'device.paired';
+  static const deviceStateChanged = 'device.state_changed';
 
   // -- Oura imports -----------------------------------------------------
   static const ouraSleepImported = 'oura.sleep_imported';
@@ -57,10 +75,25 @@ class EventTypes {
   // -- AI ---------------------------------------------------------------
   static const analysisRequested = 'analysis.requested';
   static const analysisCompleted = 'analysis.completed';
+  // Added for deleteAiAnalysis — typically used before regenerating an
+  // analysis; worth recording since reanalysis history is interesting.
+  static const analysisDiscarded = 'analysis.discarded';
   static const coachingMessageDelivered = 'coaching.message_delivered';
 
   // -- Lifecycle --------------------------------------------------------
   static const fastingStarted = 'fasting.started';
   static const fastingEnded = 'fasting.ended';
   static const mealLogged = 'meal.logged';
+
+  // -- Bookmarks --------------------------------------------------------
+  // Added as a new sub-domain — a vitals bookmark is a user-initiated
+  // snapshot of live sensor values, distinct from session data and
+  // journal entries.
+  static const bookmarkAdded = 'bookmark.added';
+
+  // -- App-level --------------------------------------------------------
+  // Added for clearAll — a full wipe of state boxes is a meaningful
+  // lifecycle event that the event log (which survives the wipe) should
+  // record for audit purposes.
+  static const appDataCleared = 'app.data_cleared';
 }

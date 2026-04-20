@@ -357,6 +357,14 @@ class StorageService {
 
   Future<void> saveSession(Session session) async {
     await _sessionsBox?.put(session.sessionId, session);
+    await eventLog.append(
+      type: EventTypes.sessionEnded,
+      payload: {
+        'sessionId': session.sessionId,
+        'createdAt': session.createdAt.toIso8601String(),
+        'durationSeconds': session.durationSeconds,
+      },
+    );
   }
 
   Session? getSession(String sessionId) => _sessionsBox?.get(sessionId);
@@ -378,7 +386,18 @@ class StorageService {
   }
 
   Future<void> deleteSession(String sessionId) async {
+    final prior = _sessionsBox?.get(sessionId);
     await _sessionsBox?.delete(sessionId);
+    await eventLog.append(
+      type: EventTypes.sessionDiscarded,
+      payload: {
+        'sessionId': sessionId,
+        if (prior != null)
+          'createdAt': prior.createdAt.toIso8601String(),
+        if (prior?.durationSeconds != null)
+          'durationSeconds': prior!.durationSeconds,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -387,6 +406,12 @@ class StorageService {
 
   Future<void> saveAiAnalysis(AiAnalysis analysis) async {
     await _aiAnalysesBox?.put(analysis.sessionId, analysis);
+    await eventLog.append(
+      type: EventTypes.analysisCompleted,
+      payload: {
+        'sessionId': analysis.sessionId,
+      },
+    );
   }
 
   AiAnalysis? getAiAnalysis(String sessionId) =>
@@ -394,6 +419,10 @@ class StorageService {
 
   Future<void> deleteAiAnalysis(String sessionId) async {
     await _aiAnalysesBox?.delete(sessionId);
+    await eventLog.append(
+      type: EventTypes.analysisDiscarded,
+      payload: {'sessionId': sessionId},
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -403,6 +432,47 @@ class StorageService {
   Future<void> saveOuraDailyRecord(OuraDailyRecord record) async {
     final key = record.date.toIso8601String().substring(0, 10);
     await _dailyRecordsBox?.put(key, record);
+    // Batch import: one event per logical sub-domain populated by this
+    // save. Oura daily records bundle sleep + readiness (and sometimes
+    // neither — e.g. offline days). Missing sub-domains don't get an
+    // event since nothing new arrived in that area.
+    final hasSleep =
+        record.sleepScore != null || record.sleepContributors != null;
+    final hasReadiness = record.readinessScore != null ||
+        record.readinessContributors != null;
+    if (hasSleep) {
+      await eventLog.append(
+        type: EventTypes.ouraSleepImported,
+        payload: {
+          'date': key,
+          'sleepScore': record.sleepScore,
+        },
+      );
+    }
+    if (hasReadiness) {
+      await eventLog.append(
+        type: EventTypes.ouraReadinessImported,
+        payload: {
+          'date': key,
+          'readinessScore': record.readinessScore,
+        },
+      );
+    }
+    // Emit the activity event when neither of the specific sub-domains
+    // applies but the record still brought in activity-adjacent signals
+    // (vo2Max, cardiovascularAge, stressDaySummary). Keeps the log
+    // invariant "one import → at least one event" intact.
+    if (!hasSleep && !hasReadiness) {
+      await eventLog.append(
+        type: EventTypes.ouraActivityImported,
+        payload: {
+          'date': key,
+          'vo2Max': record.vo2Max,
+          'cardiovascularAge': record.cardiovascularAge,
+          'resilienceLevel': record.resilienceLevel,
+        },
+      );
+    }
   }
 
   OuraDailyRecord? getOuraDailyRecord(DateTime date) {
@@ -422,8 +492,19 @@ class StorageService {
   // User Profile
   // ---------------------------------------------------------------------------
 
-  Future<void> saveUserProfile(UserProfile profile) async {
+  /// Low-level profile put without event emission. Used by the meal-
+  /// time updaters so they can emit their own domain-specific event
+  /// (`meal.logged`) instead of the generic profile-change event.
+  Future<void> _putProfile(UserProfile profile) async {
     await _userProfileBox?.put('profile', profile);
+  }
+
+  Future<void> saveUserProfile(UserProfile profile) async {
+    await _putProfile(profile);
+    await eventLog.append(
+      type: EventTypes.profileFieldChanged,
+      payload: profile.toJson(),
+    );
   }
 
   UserProfile? getUserProfile() => _userProfileBox?.get('profile');
@@ -432,6 +513,7 @@ class StorageService {
     final existing = getUserProfile();
     if (existing == null) return;
 
+    final mealTime = DateTime.now();
     final updated = UserProfile(
       userId: existing.userId,
       createdAt: existing.createdAt,
@@ -452,9 +534,13 @@ class StorageService {
       fastingType: existing.fastingType,
       eatWindowStartHour: existing.eatWindowStartHour,
       eatWindowEndHour: existing.eatWindowEndHour,
-      lastMealTime: DateTime.now(),
+      lastMealTime: mealTime,
     );
-    await saveUserProfile(updated);
+    await _putProfile(updated);
+    await eventLog.append(
+      type: EventTypes.mealLogged,
+      payload: {'loggedAt': mealTime.toIso8601String()},
+    );
     unawaited(WidgetService.updateWidget());
   }
 
@@ -488,7 +574,14 @@ class StorageService {
       eatWindowEndHour: existing.eatWindowEndHour,
       lastMealTime: mealTime,
     );
-    await saveUserProfile(updated);
+    await _putProfile(updated);
+    await eventLog.append(
+      type: EventTypes.mealLogged,
+      payload: {
+        'loggedAt': mealTime.toIso8601String(),
+        'source': 'widget',
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -497,6 +590,15 @@ class StorageService {
 
   Future<void> saveConnectorState(ConnectorState state) async {
     await _connectorStatesBox?.put(state.connectorId, state);
+    // Intentionally emits the generic state-changed event rather than
+    // device.connected/disconnected: this path is driven by internal
+    // connector-registry bookkeeping (automatic reconnects, sync
+    // completion), not explicit user pairing actions. The specific
+    // types are reserved for user-initiated flows layered on top.
+    await eventLog.append(
+      type: EventTypes.deviceStateChanged,
+      payload: state.toJson(),
+    );
   }
 
   ConnectorState? getConnectorState(String connectorId) =>
@@ -531,7 +633,15 @@ class StorageService {
   }
 
   Future<void> deleteBloodwork(String id) async {
+    final prior = _bloodworkBox?.get(id);
     await _bloodworkBox?.delete(id);
+    await eventLog.append(
+      type: EventTypes.profileBloodworkRemoved,
+      payload: {
+        'id': id,
+        if (prior != null) 'labDate': prior.labDate.toIso8601String(),
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -551,6 +661,13 @@ class StorageService {
     await _activeProtocolsBox?.clear();
     await _bookmarksBox?.clear();
     await _journalBox?.clear();
+    // One summary event for the whole batch — per-box events would be
+    // noise and there's no per-record context to preserve. The events
+    // box survives clearAll, so this record sticks around.
+    await eventLog.append(
+      type: EventTypes.appDataCleared,
+      payload: {'boxes': List<String>.from(_boxNames)},
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -559,6 +676,14 @@ class StorageService {
 
   Future<void> saveTemplate(SessionTemplate template) async {
     await _sessionTemplatesBox?.put(template.id, template);
+    await eventLog.append(
+      type: EventTypes.sessionTemplateSaved,
+      payload: {
+        'id': template.id,
+        'name': template.name,
+        'sessionType': template.sessionType,
+      },
+    );
   }
 
   SessionTemplate? getTemplate(String id) =>
@@ -572,7 +697,15 @@ class StorageService {
   }
 
   Future<void> deleteTemplate(String id) async {
+    final prior = _sessionTemplatesBox?.get(id);
     await _sessionTemplatesBox?.delete(id);
+    await eventLog.append(
+      type: EventTypes.sessionTemplateDeleted,
+      payload: {
+        'id': id,
+        if (prior != null) 'name': prior.name,
+      },
+    );
   }
 
   Future<void> incrementTemplateUseCount(String id) async {
@@ -593,6 +726,14 @@ class StorageService {
       useCount: existing.useCount + 1,
     );
     await _sessionTemplatesBox?.put(id, updated);
+    await eventLog.append(
+      type: EventTypes.sessionTemplateUsed,
+      payload: {
+        'id': id,
+        'name': existing.name,
+        'useCount': updated.useCount,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -646,10 +787,28 @@ class StorageService {
       isActive: false,
     );
     await _activeProtocolsBox?.put(id, updated);
+    await eventLog.append(
+      type: EventTypes.protocolItemModified,
+      payload: {
+        'id': id,
+        'name': updated.name,
+        'isActive': false,
+        'endDate': updated.endDate!.toIso8601String(),
+      },
+    );
   }
 
   Future<void> deleteActiveProtocol(String id) async {
+    final prior = _activeProtocolsBox?.get(id);
     await _activeProtocolsBox?.delete(id);
+    await eventLog.append(
+      type: EventTypes.protocolItemRemoved,
+      payload: {
+        'id': id,
+        if (prior != null) 'name': prior.name,
+        if (prior != null) 'type': prior.type,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -659,6 +818,10 @@ class StorageService {
   Future<void> saveBookmark(VitalsBookmark bookmark) async {
     final json = jsonEncode(bookmark.toJson());
     await _bookmarksBox?.put(bookmark.id, json);
+    await eventLog.append(
+      type: EventTypes.bookmarkAdded,
+      payload: bookmark.toJson(),
+    );
   }
 
   List<VitalsBookmark> getAllBookmarks() {
@@ -683,6 +846,14 @@ class StorageService {
 
   Future<void> saveJournalEntry(HealthJournalEntry entry) async {
     await _journalBox!.put(entry.id, jsonEncode(entry.toJson()));
+    await eventLog.append(
+      type: EventTypes.journalEntryAdded,
+      payload: {
+        'id': entry.id,
+        'conversationId': entry.conversationId,
+        'timestamp': entry.timestamp.toIso8601String(),
+      },
+    );
   }
 
   List<HealthJournalEntry> getAllJournalEntries() {
@@ -703,6 +874,14 @@ class StorageService {
 
   Future<void> updateJournalEntry(HealthJournalEntry entry) async {
     await _journalBox!.put(entry.id, jsonEncode(entry.toJson()));
+    await eventLog.append(
+      type: EventTypes.journalEntryEdited,
+      payload: {
+        'id': entry.id,
+        'conversationId': entry.conversationId,
+        'timestamp': entry.timestamp.toIso8601String(),
+      },
+    );
   }
 
   List<HealthJournalEntry> getEntriesForConversation(

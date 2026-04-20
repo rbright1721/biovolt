@@ -1,8 +1,16 @@
 import 'dart:io';
 
 import 'package:biovolt/models/active_protocol.dart';
+import 'package:biovolt/models/ai_analysis.dart';
 import 'package:biovolt/models/biovolt_event.dart';
 import 'package:biovolt/models/bloodwork.dart';
+import 'package:biovolt/models/health_journal_entry.dart';
+import 'package:biovolt/models/normalized_record.dart';
+import 'package:biovolt/models/oura_daily.dart';
+import 'package:biovolt/models/session.dart';
+import 'package:biovolt/models/session_template.dart';
+import 'package:biovolt/models/user_profile.dart';
+import 'package:biovolt/models/vitals_bookmark.dart';
 import 'package:biovolt/services/event_log.dart';
 import 'package:biovolt/services/event_types.dart';
 import 'package:biovolt/services/storage_service.dart';
@@ -209,6 +217,507 @@ void main() {
       expect(events.length, 1);
       expect(events.first.payload['id'], 'proto-test-1');
       expect(events.first.payload['name'], 'BPC-157');
+    });
+
+    // -- Sessions ---------------------------------------------------------
+
+    test('saveSession emits session.ended', () async {
+      final s = Session(
+        sessionId: 's-1',
+        userId: 'u-1',
+        createdAt: DateTime(2026, 4, 20, 9),
+        timezone: 'UTC',
+        dataSources: ['esp32'],
+        durationSeconds: 600,
+      );
+      await storage.saveSession(s);
+
+      expect(storage.getSession('s-1'), isNotNull);
+      final events =
+          await storage.eventLog.query(type: EventTypes.sessionEnded);
+      expect(events.length, 1);
+      expect(events.first.payload['sessionId'], 's-1');
+      expect(events.first.payload['durationSeconds'], 600);
+    });
+
+    test('deleteSession emits session.discarded with prior context',
+        () async {
+      final s = Session(
+        sessionId: 's-del',
+        userId: 'u-1',
+        createdAt: DateTime(2026, 4, 20),
+        timezone: 'UTC',
+        dataSources: [],
+        durationSeconds: 300,
+      );
+      await storage.saveSession(s);
+      await storage.deleteSession('s-del');
+
+      expect(storage.getSession('s-del'), isNull);
+      final events =
+          await storage.eventLog.query(type: EventTypes.sessionDiscarded);
+      expect(events.length, 1);
+      expect(events.first.payload['sessionId'], 's-del');
+      expect(events.first.payload['durationSeconds'], 300);
+    });
+
+    // -- AI analysis ------------------------------------------------------
+
+    test('saveAiAnalysis emits analysis.completed', () async {
+      final a = AiAnalysis(
+        sessionId: 'sess-a',
+        generatedAt: DateTime(2026, 4, 20),
+        provider: 'anthropic',
+        model: 'claude',
+        promptVersion: 'v1',
+        insights: const [],
+        anomalies: const [],
+        correlationsDetected: const [],
+        protocolRecommendations: const [],
+        flags: const [],
+        confidence: 0.9,
+        ouraContextUsed: false,
+      );
+      await storage.saveAiAnalysis(a);
+
+      expect(storage.getAiAnalysis('sess-a'), isNotNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.analysisCompleted);
+      expect(events.length, 1);
+      expect(events.first.payload['sessionId'], 'sess-a');
+    });
+
+    test('deleteAiAnalysis emits analysis.discarded', () async {
+      await storage.deleteAiAnalysis('sess-none');
+      final events = await storage.eventLog
+          .query(type: EventTypes.analysisDiscarded);
+      expect(events.length, 1);
+      expect(events.first.payload['sessionId'], 'sess-none');
+    });
+
+    // -- Oura daily record ------------------------------------------------
+
+    test(
+        'saveOuraDailyRecord emits one event per populated sub-domain',
+        () async {
+      final sleepOnly = OuraDailyRecord(
+        date: DateTime(2026, 4, 18),
+        syncedAt: DateTime(2026, 4, 19),
+        sleepScore: 82,
+      );
+      await storage.saveOuraDailyRecord(sleepOnly);
+
+      final both = OuraDailyRecord(
+        date: DateTime(2026, 4, 19),
+        syncedAt: DateTime(2026, 4, 20),
+        sleepScore: 90,
+        readinessScore: 78,
+      );
+      await storage.saveOuraDailyRecord(both);
+
+      final sleepEvents = await storage.eventLog
+          .query(type: EventTypes.ouraSleepImported);
+      final readinessEvents = await storage.eventLog
+          .query(type: EventTypes.ouraReadinessImported);
+      // Two sleep-bearing records → two sleep events; one readiness
+      // record → one readiness event.
+      expect(sleepEvents.length, 2);
+      expect(readinessEvents.length, 1);
+    });
+
+    // -- User profile + meal time -----------------------------------------
+
+    test('saveUserProfile emits profile.field_changed', () async {
+      final p = UserProfile(
+        userId: 'u-1',
+        createdAt: DateTime(2026, 1, 1),
+        healthGoals: const [],
+        knownConditions: const [],
+        baselineEstablished: true,
+        preferredUnits: 'imperial',
+      );
+      await storage.saveUserProfile(p);
+
+      expect(storage.getUserProfile(), isNotNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.profileFieldChanged);
+      expect(events.length, 1);
+      expect(events.first.payload['userId'], 'u-1');
+    });
+
+    test(
+        'updateLastMealTimeExplicit emits meal.logged without a redundant profile.field_changed',
+        () async {
+      // Seed an existing profile so the updater has something to work on.
+      final seed = UserProfile(
+        userId: 'u-1',
+        createdAt: DateTime(2026, 1, 1),
+        healthGoals: const [],
+        knownConditions: const [],
+        baselineEstablished: true,
+        preferredUnits: 'imperial',
+      );
+      await storage.saveUserProfile(seed);
+
+      // Only count profile.field_changed events created AFTER seeding.
+      final beforeProfileCount = (await storage.eventLog
+              .query(type: EventTypes.profileFieldChanged))
+          .length;
+
+      final mealTime = DateTime(2026, 4, 20, 13, 15);
+      await storage.updateLastMealTimeExplicit(mealTime);
+
+      final meals = await storage.eventLog
+          .query(type: EventTypes.mealLogged);
+      expect(meals.length, 1);
+      expect(meals.first.payload['loggedAt'], mealTime.toIso8601String());
+      expect(meals.first.payload['source'], 'widget');
+
+      final afterProfileCount = (await storage.eventLog
+              .query(type: EventTypes.profileFieldChanged))
+          .length;
+      expect(afterProfileCount, beforeProfileCount,
+          reason:
+              'meal update should NOT double-emit profile.field_changed');
+    });
+
+    // -- Connector state --------------------------------------------------
+
+    test('saveConnectorState emits device.state_changed', () async {
+      final cs = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      await storage.saveConnectorState(cs);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.deviceStateChanged);
+      expect(events.length, 1);
+      expect(events.first.payload['connectorId'], 'esp32');
+      expect(events.first.payload['status'], 'connected');
+    });
+
+    // -- Bloodwork delete -------------------------------------------------
+
+    test('deleteBloodwork emits profile.bloodwork_removed', () async {
+      final bw = Bloodwork(id: 'bw-x', labDate: DateTime(2026, 3, 1));
+      await storage.saveBloodwork(bw);
+      await storage.deleteBloodwork('bw-x');
+
+      expect(storage.getBloodwork('bw-x'), isNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkRemoved);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 'bw-x');
+    });
+
+    // -- Session templates ------------------------------------------------
+
+    test('saveTemplate emits session.template_saved', () async {
+      final t = SessionTemplate(
+        id: 't-1',
+        name: 'Morning breathwork',
+        sessionType: 'breathwork',
+        lastUsedAt: DateTime(2026, 4, 1),
+        useCount: 0,
+      );
+      await storage.saveTemplate(t);
+
+      expect(storage.getTemplate('t-1'), isNotNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.sessionTemplateSaved);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 't-1');
+      expect(events.first.payload['name'], 'Morning breathwork');
+    });
+
+    test('deleteTemplate emits session.template_deleted', () async {
+      final t = SessionTemplate(
+        id: 't-del',
+        name: 'Retired',
+        sessionType: 'cold',
+        lastUsedAt: DateTime(2026, 1, 1),
+        useCount: 5,
+      );
+      await storage.saveTemplate(t);
+      await storage.deleteTemplate('t-del');
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.sessionTemplateDeleted);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 't-del');
+      expect(events.first.payload['name'], 'Retired');
+    });
+
+    test(
+        'incrementTemplateUseCount emits session.template_used with updated count',
+        () async {
+      final t = SessionTemplate(
+        id: 't-use',
+        name: 'Used',
+        sessionType: 'meditation',
+        lastUsedAt: DateTime(2026, 1, 1),
+        useCount: 2,
+      );
+      await storage.saveTemplate(t);
+      await storage.incrementTemplateUseCount('t-use');
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.sessionTemplateUsed);
+      expect(events.length, 1);
+      expect(events.first.payload['useCount'], 3);
+    });
+
+    // -- Protocol end / delete --------------------------------------------
+
+    test('endProtocol emits protocol.item_modified with isActive=false',
+        () async {
+      final p = ActiveProtocol(
+        id: 'p-end',
+        name: 'To end',
+        type: 'peptide',
+        startDate: DateTime(2026, 3, 1),
+        cycleLengthDays: 30,
+        doseMcg: 100,
+        route: 'oral',
+        isActive: true,
+      );
+      await storage.saveActiveProtocol(p);
+      await storage.endProtocol('p-end');
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.protocolItemModified);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 'p-end');
+      expect(events.first.payload['isActive'], false);
+      expect(storage.getActiveProtocol('p-end')!.isActive, false);
+    });
+
+    test('deleteActiveProtocol emits protocol.item_removed', () async {
+      final p = ActiveProtocol(
+        id: 'p-gone',
+        name: 'To delete',
+        type: 'supplement',
+        startDate: DateTime(2026, 3, 1),
+        cycleLengthDays: 14,
+        doseMcg: 50,
+        route: 'oral',
+        isActive: true,
+      );
+      await storage.saveActiveProtocol(p);
+      await storage.deleteActiveProtocol('p-gone');
+
+      expect(storage.getActiveProtocol('p-gone'), isNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.protocolItemRemoved);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 'p-gone');
+      expect(events.first.payload['name'], 'To delete');
+    });
+
+    // -- Vitals bookmark --------------------------------------------------
+
+    test('saveBookmark emits bookmark.added', () async {
+      final b = VitalsBookmark(
+        id: 'bm-1',
+        timestamp: DateTime(2026, 4, 20, 14),
+        note: 'Post-cold',
+        hrBpm: 58,
+        hrvMs: 72,
+      );
+      await storage.saveBookmark(b);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.bookmarkAdded);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 'bm-1');
+      expect(events.first.payload['note'], 'Post-cold');
+    });
+
+    // -- Journal entries --------------------------------------------------
+
+    test('saveJournalEntry emits journal.entry_added', () async {
+      final e = HealthJournalEntry(
+        id: 'j-1',
+        timestamp: DateTime(2026, 4, 20),
+        userMessage: 'feeling good',
+        aiResponse: 'ok',
+        conversationId: 'c-1',
+      );
+      await storage.saveJournalEntry(e);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.journalEntryAdded);
+      expect(events.length, 1);
+      expect(events.first.payload['id'], 'j-1');
+      expect(events.first.payload['conversationId'], 'c-1');
+    });
+
+    test('updateJournalEntry emits journal.entry_edited', () async {
+      final e = HealthJournalEntry(
+        id: 'j-2',
+        timestamp: DateTime(2026, 4, 20),
+        userMessage: 'first',
+        aiResponse: 'a',
+        conversationId: 'c-1',
+      );
+      await storage.saveJournalEntry(e);
+      await storage.updateJournalEntry(e);
+
+      final edits = await storage.eventLog
+          .query(type: EventTypes.journalEntryEdited);
+      expect(edits.length, 1);
+      expect(edits.first.payload['id'], 'j-2');
+    });
+
+    // -- clearAll ---------------------------------------------------------
+
+    test('clearAll emits a single app.data_cleared event', () async {
+      // Seed some state so the clear actually removes something.
+      await storage.saveBloodwork(
+          Bloodwork(id: 'bw-pre', labDate: DateTime(2026, 1, 1)));
+      await storage.clearAll();
+
+      expect(storage.getBloodwork('bw-pre'), isNull);
+      final events = await storage.eventLog
+          .query(type: EventTypes.appDataCleared);
+      expect(events.length, 1);
+      expect(events.first.payload['boxes'], isA<List<dynamic>>());
+      expect(
+        (events.first.payload['boxes'] as List).contains('bloodwork'),
+        isTrue,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Group 2.5: Source-scan enforcement of the two-write invariant
+  // ---------------------------------------------------------------------------
+
+  group('StorageService two-write invariant', () {
+    // Methods whose state-box writes are intentionally not paired with
+    // an event. These are either infrastructure (init / migration /
+    // adapter registration) or private helpers whose callers emit.
+    const exemptMethods = <String>{
+      'init',
+      'initForTest',
+      'resetForTest',
+      '_openEventLog',
+      '_openAllBoxes',
+      '_migrateIfNeeded',
+      '_registerAdapters',
+      // `_putProfile` is deliberately unpaired — its public callers
+      // (saveUserProfile, updateLastMealTime, updateLastMealTimeExplicit)
+      // each emit their own, more-specific event. If _putProfile emitted
+      // too, every meal update would double-log.
+      '_putProfile',
+    };
+
+    test(
+        'every state-box write lives in a method that also emits an event',
+        () async {
+      final source = await File('lib/services/storage_service.dart')
+          .readAsString();
+      final lines = source.split('\n');
+
+      // A class-method header at 2-space indent. Captures the method
+      // name. Covers both block-body (`{`) and arrow-body (`=>`) forms.
+      final headerRe = RegExp(
+        r'^  (?:@\w+(?:\([^)]*\))?\s+)*'
+        r'(?:static\s+)?'
+        r'(?:[A-Za-z_][\w<>?, ]*\s+)?'
+        r'(_?[A-Za-z]\w*)\s*\([^)]*\)\s*'
+        r'(?:async\s*)?(\{|=>)',
+      );
+      final methodEndRe = RegExp(r'^  \}\s*$');
+
+      // A state-box mutation: put/delete/clear on a `_xxxBox` field,
+      // excluding the event log's own infrastructure boxes.
+      final writeRe = RegExp(r'_[A-Za-z]+Box\??\.(put|delete|clear)\(');
+      const infraBoxes = ['_eventsBox', '_deviceIdentityBox'];
+
+      bool isStateWrite(String line) {
+        if (!writeRe.hasMatch(line)) return false;
+        for (final e in infraBoxes) {
+          if (line.contains(e)) return false;
+        }
+        return true;
+      }
+
+      // First pass: for each line, compute enclosing method name.
+      final enclosing = List<String?>.filled(lines.length, null);
+      String? current;
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        final m = headerRe.firstMatch(line);
+        if (m != null) {
+          current = m.group(1);
+        }
+        enclosing[i] = current;
+        if (methodEndRe.hasMatch(line)) {
+          current = null;
+        }
+      }
+
+      // For each method that contains a state write, verify it also
+      // contains `eventLog.append` somewhere in its body.
+      final methodWriteLines = <String, List<int>>{};
+      for (var i = 0; i < lines.length; i++) {
+        final method = enclosing[i];
+        if (method == null) continue;
+        if (!isStateWrite(lines[i])) continue;
+        methodWriteLines.putIfAbsent(method, () => []).add(i);
+      }
+
+      bool methodEmits(String methodName) {
+        // Find all line ranges where enclosing == methodName.
+        for (var i = 0; i < lines.length; i++) {
+          if (enclosing[i] != methodName) continue;
+          if (lines[i].contains('eventLog.append')) return true;
+        }
+        return false;
+      }
+
+      final violations = <String>[];
+      for (final entry in methodWriteLines.entries) {
+        if (exemptMethods.contains(entry.key)) continue;
+        if (!methodEmits(entry.key)) {
+          violations.add(
+              '${entry.key} (writes at lines ${entry.value.map((i) => i + 1).toList()})');
+        }
+      }
+
+      expect(
+        violations,
+        isEmpty,
+        reason: 'Methods writing to a state box without emitting an '
+            'event: $violations. Either emit eventLog.append or add '
+            'the method to exemptMethods with a justification.',
+      );
+    });
+
+    test('every line-level state-box write is covered by the scanner',
+        () async {
+      // Safety check on the scanner itself: if the raw count of write
+      // lines doesn't match the count found via the header-aware scan,
+      // the scanner has drifted from the source.
+      final source = await File('lib/services/storage_service.dart')
+          .readAsString();
+      final rawLines = source.split('\n').where((l) {
+        if (!RegExp(r'_[A-Za-z]+Box\??\.(put|delete|clear)\(')
+            .hasMatch(l)) {
+          return false;
+        }
+        return !(l.contains('_eventsBox') ||
+            l.contains('_deviceIdentityBox'));
+      }).toList();
+
+      // We expect at least the writes enumerated in the audit; if this
+      // count drops unexpectedly the source has diverged.
+      expect(rawLines.length, greaterThanOrEqualTo(25),
+          reason:
+              'Expected >=25 state-box writes in StorageService; scanner may be broken.');
     });
   });
 
