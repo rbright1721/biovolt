@@ -1,3 +1,4 @@
+import '../models/device_capability.dart';
 import '../models/normalized_record.dart';
 
 /// Every signal type that BioVolt can ingest from any connector.
@@ -36,6 +37,17 @@ abstract class BioVoltConnector {
 
   /// Which data types this connector can provide.
   List<DataType> get supportedDataTypes;
+
+  /// What the connector can actually deliver — live streams,
+  /// post-hoc summaries, or both. SessionRecorder uses the union of
+  /// capabilities from connected connectors to pick streaming vs.
+  /// enrich-later vs. manual mode.
+  Set<DeviceCapability> get capabilities;
+
+  /// Called just before a session starts so connectors can reset any
+  /// per-session baselines (e.g. GSR tonic baseline on the ESP32 pod).
+  /// Most connectors implement this as a no-op.
+  Future<void> prepareForSession();
 
   // ---------------------------------------------------------------------------
   // Auth

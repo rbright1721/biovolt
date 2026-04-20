@@ -32,7 +32,11 @@
       "Bash(node -e \"require\\('./index.js'\\); console.log\\('syntax OK'\\)\")",
       "Bash(node -e \"require\\('C:/Users/jbrig/StudioProjects/biovolt/functions/index.js'\\); console.log\\('syntax OK'\\)\")",
       "Bash(pushd C:/Users/jbrig/StudioProjects/biovolt)",
-      "Bash(popd)"
+      "Bash(popd)",
+      "Bash(taskkill /F /IM flutter.bat /IM dart.exe)",
+      "Bash(cmd //c \"taskkill /F /IM flutter.bat\")",
+      "Bash(cmd //c \"taskkill /F /IM dart.exe\")",
+      "Bash(cmd //c \"taskkill /F /IM flutter.bat /T\")"
     ]
   }
 }

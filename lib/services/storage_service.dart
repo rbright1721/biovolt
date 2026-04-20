@@ -48,6 +48,17 @@ class StorageService {
 
   EventLog? _eventLog;
 
+  /// In-memory dedup cache for `device.state_changed` emissions. Keyed
+  /// by `connectorId`, the value is a canonical string derived from the
+  /// state fields that matter (status + auth) — NOT lastSync, which
+  /// ticks on every poll and would defeat dedup. Skipping emits for
+  /// no-op transitions keeps BLE reconnect churn out of the event log.
+  ///
+  /// Not persisted. On cold start the map is empty, so the first
+  /// `saveConnectorState` call per device per launch always emits —
+  /// cheaper than warm-loading prior states from Hive just for dedup.
+  final Map<String, String> _lastEmittedDeviceState = {};
+
   /// Append-only event log. Mutations emit events in parallel with
   /// their state writes. See [EventLog].
   EventLog get eventLog {
@@ -143,6 +154,7 @@ class StorageService {
     _eventsBox = null;
     _deviceIdentityBox = null;
     _eventLog = null;
+    _lastEmittedDeviceState.clear();
     _initialized = false;
   }
 
@@ -589,7 +601,16 @@ class StorageService {
   // ---------------------------------------------------------------------------
 
   Future<void> saveConnectorState(ConnectorState state) async {
+    // State-box write always happens — the record carries lastSync,
+    // which is genuinely new information even on a no-op state change.
     await _connectorStatesBox?.put(state.connectorId, state);
+    // Event emit is deduped: if the semantic state for this device is
+    // unchanged since the last emit, the event log skips this call.
+    // See [_lastEmittedDeviceState] for why lastSync is excluded from
+    // the comparison.
+    final key = _deviceStateKey(state);
+    if (_lastEmittedDeviceState[state.connectorId] == key) return;
+    _lastEmittedDeviceState[state.connectorId] = key;
     // Intentionally emits the generic state-changed event rather than
     // device.connected/disconnected: this path is driven by internal
     // connector-registry bookkeeping (automatic reconnects, sync
@@ -600,6 +621,9 @@ class StorageService {
       payload: state.toJson(),
     );
   }
+
+  static String _deviceStateKey(ConnectorState s) =>
+      '${s.status.name}|${s.isAuthenticated}';
 
   ConnectorState? getConnectorState(String connectorId) =>
       _connectorStatesBox?.get(connectorId);
@@ -615,10 +639,18 @@ class StorageService {
   // example for the two-write pattern. Every bloodwork record is a
   // discrete profile-level addition with a clean existing toJson, so the
   // event payload piggybacks on the model directly.
+  //
+  // Upsert detection: we peek at the box BEFORE the put so a repeat save
+  // of the same id surfaces as an edit rather than a second add. Trend
+  // analysis walks the event log and would otherwise double-count the
+  // "new lab drawn" signal when someone fixes a typo on an existing row.
   Future<void> saveBloodwork(Bloodwork bloodwork) async {
+    final isEdit = _bloodworkBox?.containsKey(bloodwork.id) ?? false;
     await _bloodworkBox?.put(bloodwork.id, bloodwork);
     await eventLog.append(
-      type: EventTypes.profileBloodworkAdded,
+      type: isEdit
+          ? EventTypes.profileBloodworkEdited
+          : EventTypes.profileBloodworkAdded,
       payload: bloodwork.toJson(),
     );
   }

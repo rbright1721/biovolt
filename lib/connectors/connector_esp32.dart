@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/biometric_records.dart';
+import '../models/device_capability.dart';
 import '../models/normalized_record.dart';
 import '../services/ble_service.dart';
 import 'connector_base.dart';
@@ -51,6 +52,23 @@ class Esp32Connector implements BioVoltConnector {
         DataType.skinTemp,
         DataType.spO2,
       ];
+
+  @override
+  Set<DeviceCapability> get capabilities => const {
+        DeviceCapability.liveHeartRate,
+        DeviceCapability.liveHrvRr,
+        DeviceCapability.liveEcg,
+        DeviceCapability.liveGsr,
+        DeviceCapability.liveSpo2,
+        DeviceCapability.liveTemperature,
+      };
+
+  @override
+  Future<void> prepareForSession() async {
+    // Rebuild the GSR tonic baseline from the first ~3 seconds of new
+    // samples so relative-shift emission starts from a fresh zero.
+    _bleService.resetGsrBaseline();
+  }
 
   // ---------------------------------------------------------------------------
   // Auth — BLE connection IS authentication

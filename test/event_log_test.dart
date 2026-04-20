@@ -190,6 +190,60 @@ void main() {
       expect(events.length, 1);
       expect(events.first.payload['id'], 'bw-test-1');
       expect(events.first.payload['hdl'], 62.0);
+
+      // New id → no `_edited` event fired.
+      final edits = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkEdited);
+      expect(edits, isEmpty);
+    });
+
+    test('saveBloodwork twice with the same id → one _added then one _edited',
+        () async {
+      final first = Bloodwork(
+        id: 'bw-upsert',
+        labDate: DateTime(2026, 4, 15),
+        hdl: 60.0,
+      );
+      final corrected = Bloodwork(
+        id: 'bw-upsert',
+        labDate: DateTime(2026, 4, 15),
+        hdl: 62.0, // typo fix on the existing row
+      );
+
+      await storage.saveBloodwork(first);
+      await storage.saveBloodwork(corrected);
+
+      final adds = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkAdded);
+      final edits = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkEdited);
+
+      expect(adds.length, 1);
+      expect(adds.first.payload['hdl'], 60.0);
+      expect(edits.length, 1);
+      expect(edits.first.payload['hdl'], 62.0);
+    });
+
+    test(
+        'saveBloodwork three times with the same id → one _added and two _edited',
+        () async {
+      for (final hdl in [55.0, 58.0, 60.0]) {
+        await storage.saveBloodwork(Bloodwork(
+          id: 'bw-serial',
+          labDate: DateTime(2026, 4, 15),
+          hdl: hdl,
+        ));
+      }
+
+      final adds = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkAdded);
+      final edits = await storage.eventLog
+          .query(type: EventTypes.profileBloodworkEdited);
+
+      expect(adds.length, 1);
+      expect(edits.length, 2);
+      // Last edit carries the most recent payload.
+      expect(edits.last.payload['hdl'], 60.0);
     });
 
     test('saveActiveProtocol writes to both protocols and events boxes',
@@ -396,6 +450,108 @@ void main() {
       expect(events.length, 1);
       expect(events.first.payload['connectorId'], 'esp32');
       expect(events.first.payload['status'], 'connected');
+    });
+
+    test(
+        'saveConnectorState dedup: same state twice emits one event',
+        () async {
+      final cs = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      await storage.saveConnectorState(cs);
+      await storage.saveConnectorState(cs);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.deviceStateChanged);
+      expect(events.length, 1);
+    });
+
+    test(
+        'saveConnectorState dedup: A → B → A emits three events (no cross-gap dedup)',
+        () async {
+      final a = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      final b = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.disconnected,
+        isAuthenticated: true,
+      );
+
+      await storage.saveConnectorState(a);
+      await storage.saveConnectorState(b);
+      await storage.saveConnectorState(a);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.deviceStateChanged);
+      expect(events.length, 3);
+      expect(events[0].payload['status'], 'connected');
+      expect(events[1].payload['status'], 'disconnected');
+      expect(events[2].payload['status'], 'connected');
+    });
+
+    test(
+        'saveConnectorState dedup is per-device: same state, two ids → two events',
+        () async {
+      final esp = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      final h10 = ConnectorState(
+        connectorId: 'polar_h10',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      await storage.saveConnectorState(esp);
+      await storage.saveConnectorState(h10);
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.deviceStateChanged);
+      expect(events.length, 2);
+      final ids =
+          events.map((e) => e.payload['connectorId']).toSet();
+      expect(ids, {'esp32', 'polar_h10'});
+    });
+
+    test(
+        'saveConnectorState dedup cache does not survive resetForTest',
+        () async {
+      final cs = ConnectorState(
+        connectorId: 'esp32',
+        status: ConnectorStatus.connected,
+        isAuthenticated: true,
+      );
+      await storage.saveConnectorState(cs);
+
+      // Tear down the current storage, stand a fresh one back up on a
+      // separate temp dir, then replay the same state. The new instance
+      // should treat this as a first emit.
+      await storage.resetForTest();
+      final freshDir = Directory.systemTemp
+          .createTempSync('biovolt_dedup_reset_');
+      try {
+        await storage.initForTest(freshDir.path);
+        await storage.saveConnectorState(cs);
+
+        final events = await storage.eventLog
+            .query(type: EventTypes.deviceStateChanged);
+        expect(events.length, 1,
+            reason:
+                'dedup cache is in-memory only; reset should clear it');
+      } finally {
+        await storage.resetForTest();
+        try {
+          freshDir.deleteSync(recursive: true);
+        } catch (_) {}
+        // Re-init on the original tempDir so the outer tearDown's
+        // resetForTest + delete sequence stays balanced.
+        await storage.initForTest(tempDir.path);
+      }
     });
 
     // -- Bloodwork delete -------------------------------------------------

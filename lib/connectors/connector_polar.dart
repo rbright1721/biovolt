@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:polar/polar.dart';
 
 import '../models/biometric_records.dart';
+import '../models/device_capability.dart';
 import '../models/normalized_record.dart';
 import 'connector_base.dart';
 
@@ -52,6 +53,16 @@ class PolarConnector implements BioVoltConnector {
         DataType.hrv,
         DataType.ecg,
       ];
+
+  @override
+  Set<DeviceCapability> get capabilities => const {
+        DeviceCapability.liveHeartRate,
+        DeviceCapability.liveHrvRr,
+        DeviceCapability.liveEcg,
+      };
+
+  @override
+  Future<void> prepareForSession() async {}
 
   // ---------------------------------------------------------------------------
   // Auth — BLE scan + connect

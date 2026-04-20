@@ -15,6 +15,10 @@ class EventTypes {
   static const profileFieldChanged = 'profile.field_changed';
   static const profileGeneticMarkerAdded = 'profile.genetic_marker_added';
   static const profileBloodworkAdded = 'profile.bloodwork_added';
+  // Added so trend analysis can tell "new lab drawn" from "typo fix on
+  // existing lab" — both flow through saveBloodwork but have very
+  // different analytical meaning.
+  static const profileBloodworkEdited = 'profile.bloodwork_edited';
   // Added for deleteBloodwork — deletions need their own type so the log
   // doesn't conflate creations and removals.
   static const profileBloodworkRemoved = 'profile.bloodwork_removed';

@@ -3,11 +3,11 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
-import '../connectors/connector_esp32.dart';
 import '../connectors/connector_registry.dart';
 import 'auth_service.dart';
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
+import '../models/device_capability.dart';
 import '../models/interventions.dart';
 import '../models/normalized_record.dart';
 import '../models/session.dart';
@@ -16,6 +16,27 @@ import 'firestore_sync.dart';
 import 'prompt_builder.dart';
 import 'storage_service.dart';
 import 'widget_service.dart';
+
+/// How the recorder is currently collecting data for the active session.
+///
+/// Driven entirely by [ConnectorRegistry.availableCapabilities] — no
+/// per-connector name checks. Mode can change mid-session if a live
+/// connector drops while a summary-only connector remains.
+enum SessionMode {
+  /// At least one connected connector streams live heart rate. Buffer
+  /// samples, persist every 10s, run quick coach.
+  streaming,
+
+  /// No live HR, but a summary connector (e.g. Oura) can backfill
+  /// averages after the session ends. UI should show the enrich-later
+  /// banner; the recorder stores the session skeleton and queues an
+  /// enrichment request at stopSession time.
+  enrichLater,
+
+  /// No live streams and no summary backfill available. Purely manual
+  /// session — subjective scores only.
+  manual,
+}
 
 /// Manages the full lifecycle of an active biofeedback session.
 ///
@@ -30,8 +51,11 @@ class SessionRecorder {
 
   Session? _activeSession;
   StreamSubscription? _sensorSubscription;
+  StreamSubscription? _capabilitySubscription;
   Timer? _persistTimer;
   Timer? _coachTimer;
+
+  SessionMode _mode = SessionMode.manual;
 
   bool _coachRunning = false;
 
@@ -55,6 +79,29 @@ class SessionRecorder {
       StreamController<AiAnalysis>.broadcast();
   Stream<AiAnalysis> get analysisCompleteStream =>
       _analysisCompleteController.stream;
+
+  /// Emits whenever the current [SessionMode] changes — typically when
+  /// a live connector drops mid-session and the recorder falls back to
+  /// enrich-later, or when a device reconnects and streaming resumes.
+  final _modeController = StreamController<SessionMode>.broadcast();
+  Stream<SessionMode> get modeStream => _modeController.stream;
+
+  /// Current session mode. Valid during an active session; read as
+  /// [SessionMode.manual] when idle.
+  SessionMode get mode => _mode;
+
+  /// Pure capability → mode mapping. Extracted so tests can exercise
+  /// the decision without spinning up the full recorder.
+  @visibleForTesting
+  static SessionMode modeForCapabilities(Set<DeviceCapability> caps) {
+    if (caps.contains(DeviceCapability.liveHeartRate)) {
+      return SessionMode.streaming;
+    }
+    if (caps.contains(DeviceCapability.summaryHeartRate)) {
+      return SessionMode.enrichLater;
+    }
+    return SessionMode.manual;
+  }
 
   SessionRecorder({
     required StorageService storage,
@@ -83,12 +130,11 @@ class SessionRecorder {
     final now = DateTime.now();
     final sessionId = now.millisecondsSinceEpoch.toString();
 
-    // Determine data sources from connected connectors
+    // Data sources reflect whatever's actually connected right now.
     final connectedIds = _connectorRegistry
         .getConnected()
         .map((c) => c.connectorId)
         .toList();
-    if (connectedIds.isEmpty) connectedIds.add('esp32');
 
     _activeSession = Session(
       sessionId: sessionId,
@@ -103,15 +149,26 @@ class SessionRecorder {
     _recordBuffer.clear();
     _fullSessionRecords.clear();
 
-    // Re-establish GSR session baseline if the ESP32 is connected.
-    // First ~3s of samples will rebuild the baseline before relative
-    // shift values are emitted.
-    final esp32 = _connectorRegistry.get('esp32_biovolt');
-    if (esp32 is Esp32Connector) {
-      esp32.resetGsrBaseline();
+    // Let every connected connector reset per-session baselines
+    // (ESP32 rebuilds its GSR tonic zero here; others no-op).
+    for (final c in _connectorRegistry.getConnected()) {
+      unawaited(c.prepareForSession().catchError(
+          (e) => debugPrint('prepareForSession failed for ${c.connectorId}: $e')));
     }
 
-    // Subscribe to merged live stream from all connectors
+    // Capability-driven mode selection. Re-evaluate whenever the
+    // registry reports a change so a mid-session disconnect can
+    // transition streaming → enrich-later without restarting.
+    _applyMode(
+        modeForCapabilities(_connectorRegistry.availableCapabilities()));
+    _capabilitySubscription =
+        _connectorRegistry.capabilityStream.listen((caps) {
+      _applyMode(modeForCapabilities(caps));
+    });
+
+    // Subscribe to merged live stream from all connectors. In enrich-
+    // later / manual modes this stream is either empty or sparse; it's
+    // still safe to listen because nothing will arrive.
     _sensorSubscription =
         _connectorRegistry.mergedLiveStream.listen(_onRecord);
 
@@ -120,15 +177,30 @@ class SessionRecorder {
       _persistCurrentState();
     });
 
-    // Coach every 10 seconds (if AI key configured)
+    // Coach every 10 seconds (if AI key configured and we have live data)
     _coachTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      _runQuickCoach();
+      if (_mode == SessionMode.streaming) _runQuickCoach();
     });
 
     // Initial persist
     _persistCurrentState();
 
     return sessionId;
+  }
+
+  void _applyMode(SessionMode next) {
+    if (next == _mode && isRecording) return;
+    _mode = next;
+    _modeController.add(next);
+  }
+
+  /// Stub hook for post-session Oura/summary enrichment. Invoked at
+  /// stopSession time when the recorder ran in enrich-later mode.
+  /// Actual backfill logic is a future session — this just records
+  /// intent so the rest of the wiring can be exercised end-to-end.
+  Future<void> _queueEnrichment(String sessionId) async {
+    debugPrint(
+        'SessionRecorder: queued summary enrichment for session $sessionId (stub)');
   }
 
   // ---------------------------------------------------------------------------
@@ -141,6 +213,8 @@ class SessionRecorder {
   Future<Session> stopSession() async {
     _sensorSubscription?.cancel();
     _sensorSubscription = null;
+    _capabilitySubscription?.cancel();
+    _capabilitySubscription = null;
     _persistTimer?.cancel();
     _persistTimer = null;
     _coachTimer?.cancel();
@@ -174,7 +248,16 @@ class SessionRecorder {
     await _storage.saveSession(finalSession);
     unawaited(FirestoreSync().writeSession(finalSession, _storage));
     unawaited(WidgetService.updateWidget());
+
+    // If we ran in enrich-later mode, queue the summary backfill stub
+    // so the session eventually gets Oura-derived averages once the
+    // next daily sync lands.
+    if (_mode == SessionMode.enrichLater) {
+      unawaited(_queueEnrichment(finalSession.sessionId));
+    }
+
     _activeSession = null;
+    _mode = SessionMode.manual;
     _recordBuffer.clear();
     _fullSessionRecords.clear();
 
@@ -396,10 +479,12 @@ class SessionRecorder {
   /// Clean up resources.
   void dispose() {
     _sensorSubscription?.cancel();
+    _capabilitySubscription?.cancel();
     _persistTimer?.cancel();
     _coachTimer?.cancel();
     _coachController.close();
     _metricsController.close();
     _analysisCompleteController.close();
+    _modeController.close();
   }
 }

@@ -4,6 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/trend_data.dart';
 import '../services/trend_analyst.dart';
+import '../ui/timeline/protocol_timeline_view.dart';
+
+enum _TrendsMode { trends, timeline }
 
 class TrendsScreen extends StatefulWidget {
   final TrendAnalyst trendAnalyst;
@@ -27,6 +30,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
   DateTime? _weeklyReportDate;
   bool _weeklyLoading = false;
   String? _filterType;
+  _TrendsMode _mode = _TrendsMode.trends;
 
   @override
   void initState() {
@@ -62,7 +66,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Text(
-                'TRENDS',
+                _mode == _TrendsMode.trends ? 'TRENDS' : 'TIMELINE',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -71,16 +75,42 @@ class _TrendsScreenState extends State<TrendsScreen> {
                 ),
               ),
             ),
-            _buildPeriodSelector(),
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: BioVoltColors.teal, strokeWidth: 2))
-                  : _buildContent(),
-            ),
+            _buildModeSelector(),
+            if (_mode == _TrendsMode.trends) ...[
+              _buildPeriodSelector(),
+              Expanded(
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                            color: BioVoltColors.teal, strokeWidth: 2))
+                    : _buildContent(),
+              ),
+            ] else
+              const Expanded(child: ProtocolTimelineView()),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildModeSelector() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Row(
+        children: [
+          for (final (mode, label) in const [
+            (_TrendsMode.trends, 'TRENDS'),
+            (_TrendsMode.timeline, 'TIMELINE'),
+          ])
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _ModeChip(
+                label: label,
+                selected: _mode == mode,
+                onTap: () => setState(() => _mode = mode),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -936,6 +966,51 @@ class _TrendBadge extends StatelessWidget {
           fontSize: 9,
           fontWeight: FontWeight.w600,
           color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected
+              ? BioVoltColors.teal.withAlpha(30)
+              : BioVoltColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected
+                ? BioVoltColors.teal.withAlpha(120)
+                : BioVoltColors.cardBorder,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected
+                ? BioVoltColors.teal
+                : BioVoltColors.textSecondary,
+            letterSpacing: 1.5,
+          ),
         ),
       ),
     );

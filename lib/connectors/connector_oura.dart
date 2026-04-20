@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/biometric_records.dart';
+import '../models/device_capability.dart';
 import '../models/normalized_record.dart';
 import '../models/oura_daily.dart';
 import '../models/sleep_record.dart';
@@ -63,6 +64,19 @@ class OuraConnector implements BioVoltConnector {
         DataType.stress,
         DataType.spO2,
       ];
+
+  @override
+  Set<DeviceCapability> get capabilities => const {
+        DeviceCapability.summarySleep,
+        DeviceCapability.summaryReadiness,
+        DeviceCapability.summaryActivity,
+        DeviceCapability.summarySpo2,
+        DeviceCapability.summaryTemperature,
+        DeviceCapability.summaryHeartRate,
+      };
+
+  @override
+  Future<void> prepareForSession() async {}
 
   // ---------------------------------------------------------------------------
   // Auth

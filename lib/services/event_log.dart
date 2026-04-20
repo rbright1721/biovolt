@@ -75,14 +75,35 @@ class EventLog {
 
   /// Filtered read. [from] and [to] compare against [BiovoltEvent.timestamp]
   /// inclusively. [limit] caps the returned list length (oldest-first).
+  ///
+  /// [type] is kept for backward compatibility and is merged with [types]
+  /// (union). Passing an empty [types] set is treated the same as passing
+  /// null — it does not filter to "no events".
+  ///
+  /// [sources] filters by [BiovoltEvent.deviceId] — useful once the log
+  /// contains events from more than one device/install.
+  // PERF: in-memory filter over the full events box. Fine up to ~50k
+  // events (~2.7 years at 50 events/day). Past that, add Hive indices or
+  // a secondary chronological index keyed by timestamp buckets.
   Future<List<BiovoltEvent>> query({
     String? type,
+    Set<String>? types,
+    Set<String>? sources,
     DateTime? from,
     DateTime? to,
     int? limit,
   }) async {
+    final typeFilter = <String>{
+      if (type != null) type,
+      if (types != null) ...types,
+    };
     Iterable<BiovoltEvent> events = _eventsBox.values;
-    if (type != null) events = events.where((e) => e.type == type);
+    if (typeFilter.isNotEmpty) {
+      events = events.where((e) => typeFilter.contains(e.type));
+    }
+    if (sources != null && sources.isNotEmpty) {
+      events = events.where((e) => sources.contains(e.deviceId));
+    }
     if (from != null) {
       events = events.where((e) => !e.timestamp.isBefore(from));
     }
