@@ -691,7 +691,7 @@ class _JournalScreenState extends State<JournalScreen> {
                 color: BioVoltColors.textPrimary,
               ),
               decoration: InputDecoration(
-                hintText: 'Ask about symptoms, protocols, how you feel...',
+                hintText: 'Ask, log a note:, or I just ate...',
                 hintStyle: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
                   color: BioVoltColors.textSecondary,
@@ -802,6 +802,51 @@ class _JournalScreenState extends State<JournalScreen> {
     final double? spo2Percent =
         sensorState.spo2 > 0 ? sensorState.spo2 : null;
 
+    // ── Deterministic client-side intent detection ────────────────────────
+    // Detect and execute data-update intents BEFORE calling the AI. Claude
+    // then just responds conversationally — the app owns all data writes.
+    String? actionConfirmation;
+    final intent = _detectIntent(text);
+
+    if (intent == 'meal') {
+      await _storage.updateLastMealTimeExplicit(DateTime.now());
+      unawaited(FirestoreSync().syncProfile(_storage));
+      unawaited(WidgetService.updateWidget());
+      actionConfirmation = '\u2713 Fasting clock reset';
+    } else if (intent == 'bookmark') {
+      final noteText = _extractNoteText(text);
+      final bookmark = VitalsBookmark(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        timestamp: DateTime.now(),
+        note: noteText,
+        hrBpm: hrBpm,
+        hrvMs: hrvMs,
+        gsrUs: gsrUs,
+        skinTempF: skinTempF,
+        spo2Percent: spo2Percent,
+      );
+      await _storage.saveBookmark(bookmark);
+      unawaited(FirestoreSync().writeBookmark(bookmark));
+      actionConfirmation = '\u2713 Logged to timeline';
+    }
+
+    if (actionConfirmation != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            actionConfirmation,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              color: BioVoltColors.background,
+            ),
+          ),
+          backgroundColor: BioVoltColors.teal,
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
     final biologicalContext = _buildBiologicalContext(
       hrBpm: hrBpm,
       hrvMs: hrvMs,
@@ -820,33 +865,6 @@ class _JournalScreenState extends State<JournalScreen> {
     );
     final aiResponse = result['response'] as String;
     final researchGrounded = result['researchGrounded'] as bool? ?? false;
-    final action = result['action'] as Map<String, dynamic>?;
-
-    if (action != null) {
-      await _handleJournalAction(action);
-      if (mounted) {
-        final actionLabel = switch (action['action']) {
-          'update_last_meal' => '\u2713 Fasting clock reset',
-          'update_protocol_notes' => '\u2713 Protocol notes updated',
-          'log_bookmark' => '\u2713 Logged to timeline',
-          _ => '\u2713 Updated',
-        };
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              actionLabel,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                color: BioVoltColors.background,
-              ),
-            ),
-            backgroundColor: BioVoltColors.teal,
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
 
     final combined = '$text\n$aiResponse'.toLowerCase();
     final autoTags = _tagKeywords.where(combined.contains).toList();
@@ -993,58 +1011,62 @@ class _JournalScreenState extends State<JournalScreen> {
         .join('\n\n');
   }
 
-  Future<void> _handleJournalAction(Map<String, dynamic> action) async {
-    final actionType = action['action'] as String?;
+  /// Returns 'meal', 'bookmark', or null. Keyword-based — intentionally
+  /// permissive on phrasing so natural speech triggers the right action
+  /// without pattern-matching punctuation.
+  String? _detectIntent(String message) {
+    final lower = message.toLowerCase().trim();
 
-    switch (actionType) {
-      case 'update_last_meal':
-        DateTime mealTime;
-        try {
-          mealTime = action['timestamp'] != null
-              ? DateTime.parse(action['timestamp'] as String)
-              : DateTime.now();
-        } catch (_) {
-          mealTime = DateTime.now();
-        }
-        await _storage.updateLastMealTimeExplicit(mealTime);
-        unawaited(FirestoreSync().syncProfile(_storage));
-        unawaited(WidgetService.updateWidget());
-        debugPrint('Journal action: meal time updated to $mealTime');
-        break;
-
-      case 'update_protocol_notes':
-        final protocolName = action['protocolName'] as String?;
-        final notes = action['notes'] as String?;
-        if (protocolName != null && notes != null) {
-          final protocols = _storage.getAllActiveProtocols();
-          final match = protocols
-              .where((p) =>
-                  p.name.toLowerCase().contains(protocolName.toLowerCase()))
-              .firstOrNull;
-          if (match != null) {
-            // ActiveProtocol needs a copyWith for notes —
-            // follow-up will wire the actual write once the model
-            // has that helper. For now log the intent.
-            debugPrint(
-                'Journal action: protocol notes update for ${match.name}');
-          }
-        }
-        break;
-
-      case 'log_bookmark':
-        final note = action['note'] as String?;
-        if (note != null) {
-          final bookmark = VitalsBookmark(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            timestamp: DateTime.now(),
-            note: note,
-          );
-          await _storage.saveBookmark(bookmark);
-          unawaited(FirestoreSync().writeBookmark(bookmark));
-          debugPrint('Journal action: bookmark logged');
-        }
-        break;
+    if (lower.contains('i just ate') ||
+        lower.contains('just ate') ||
+        lower.contains('i ate') ||
+        lower.contains('finished eating') ||
+        lower.contains('done eating') ||
+        lower.contains('broke my fast') ||
+        lower.contains('breaking my fast') ||
+        lower.contains('reset my fast') ||
+        lower.contains('reset fasting') ||
+        lower.contains('reset the clock') ||
+        lower.contains('update my meal') ||
+        lower.contains('log my meal') ||
+        lower.contains('had breakfast') ||
+        lower.contains('had lunch') ||
+        lower.contains('had dinner')) {
+      return 'meal';
     }
+
+    if (lower.startsWith('log a note:') ||
+        lower.startsWith('log note:') ||
+        lower.startsWith('note:') ||
+        lower.startsWith('bookmark:') ||
+        lower.startsWith('log:') ||
+        lower.contains('log a note') ||
+        lower.contains('save a note') ||
+        lower.contains('add to my timeline') ||
+        lower.contains('add to timeline')) {
+      return 'bookmark';
+    }
+
+    return null;
+  }
+
+  /// Strips any command prefix ("log a note:", "note:", etc.) and returns
+  /// just the note body. Falls back to the full message when there's no
+  /// recognizable prefix.
+  String _extractNoteText(String message) {
+    final lower = message.toLowerCase();
+    for (final prefix in const [
+      'log a note:',
+      'log note:',
+      'note:',
+      'bookmark:',
+      'log:',
+    ]) {
+      if (lower.startsWith(prefix)) {
+        return message.substring(prefix.length).trim();
+      }
+    }
+    return message;
   }
 
   Future<void> _toggleBookmark(HealthJournalEntry entry) async {

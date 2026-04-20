@@ -305,37 +305,6 @@ when referencing specific findings (e.g. "Study 1 found...").
 If the studies support the user's current protocol, say so clearly.
 If they suggest a different approach, note it constructively.` : ""}
 
-When the user asks you to UPDATE their data — such as
-resetting their fasting clock, updating a meal time,
-adding protocol notes, or logging a bookmark — respond
-with your normal conversational message AND append a
-JSON action block at the very end in this exact format:
-
-<biovolt_action>
-{
-  "action": "update_last_meal",
-  "timestamp": "ISO-8601-timestamp-of-meal"
-}
-</biovolt_action>
-
-Available actions:
-- update_last_meal: { "action": "update_last_meal", "timestamp": "..." }
-  Use when user says they just ate, finished eating,
-  broke their fast, or wants to reset fasting clock.
-  Use current time if no specific time mentioned.
-
-- update_protocol_notes: { "action": "update_protocol_notes",
-  "protocolName": "NAC", "notes": "..." }
-  Use when user wants to update notes on a protocol.
-
-- log_bookmark: { "action": "log_bookmark",
-  "note": "user's observation" }
-  Use when user wants to log a quick note to their timeline.
-
-Only include the action block when the user explicitly
-asks to update or change something. For questions and
-discussions, respond normally without an action block.
-
 Response rules:
 - Ground response in user's specific protocol context first
 - Reference research studies when available
@@ -386,32 +355,10 @@ Response rules:
     }
 
     const text = result.content?.[0]?.text ?? "";
-
-    // ── Action detection ─────────────────────────────────────────
-    // The AI may append <biovolt_action>{...}</biovolt_action> when
-    // the user asks to update data. Parse it out and strip from the
-    // displayed response so the user sees only conversation.
-    const actionMatch = text.match(
-      /<biovolt_action>([\s\S]*?)<\/biovolt_action>/,
-    );
-    let action = null;
-    let cleanResponse = text;
-    if (actionMatch) {
-      try {
-        action = JSON.parse(actionMatch[1].trim());
-        cleanResponse = text
-          .replace(/<biovolt_action>[\s\S]*?<\/biovolt_action>/, "")
-          .trim();
-      } catch (e) {
-        console.error("Action parse error:", e);
-      }
-    }
-
     return {
-      response: cleanResponse,
+      response: text,
       researchUsed: researchContext.length > 0,
       keywordsDetected: keywords,
-      action: action,
     };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
