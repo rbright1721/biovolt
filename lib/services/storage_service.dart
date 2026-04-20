@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'event_log.dart';
+import 'event_types.dart';
 import 'widget_service.dart';
 
 import '../models/ai_analysis.dart';
 import '../models/biometric_records.dart';
+import '../models/biovolt_event.dart';
 import '../models/bloodwork.dart';
 import '../models/interventions.dart';
 import '../models/normalized_record.dart';
@@ -39,12 +43,31 @@ class StorageService {
   Box<ActiveProtocol>? _activeProtocolsBox;
   Box<String>? _bookmarksBox;
   Box<String>? _journalBox;
+  Box<BiovoltEvent>? _eventsBox;
+  Box<String>? _deviceIdentityBox;
+
+  EventLog? _eventLog;
+
+  /// Append-only event log. Mutations emit events in parallel with
+  /// their state writes. See [EventLog].
+  EventLog get eventLog {
+    final log = _eventLog;
+    if (log == null) {
+      throw StateError(
+          'StorageService.init() must complete before eventLog is used');
+    }
+    return log;
+  }
 
   // Bump this whenever TypeAdapter IDs or model shapes change.
   // Forces a full Hive wipe on devices with stale data.
   static const _schemaVersion = 3;
   static const _schemaKey = 'hive_schema_version';
 
+  // Boxes wiped on a schema-version bump or during the nuclear
+  // corrupt-recovery path. The `events` and `device_identity` boxes
+  // are deliberately NOT in this list — the append-only event log and
+  // the per-install device UUID must survive schema migrations.
   static const _boxNames = [
     'sessions',
     'daily_records',
@@ -79,7 +102,71 @@ class StorageService {
     // -- Open boxes --
     await _openAllBoxes();
 
+    // -- Open event log + device identity (exempt from schema wipe) --
+    await _openEventLog();
+
     _initialized = true;
+  }
+
+  /// Test-only initializer that bypasses `Hive.initFlutter` and the
+  /// SharedPreferences-backed migration step. Callers are responsible
+  /// for calling [resetForTest] afterwards.
+  @visibleForTesting
+  Future<void> initForTest(String hivePath) async {
+    if (_initialized) return;
+    Hive.init(hivePath);
+    _registerAdapters();
+    await _openAllBoxes();
+    await _openEventLog();
+    _initialized = true;
+  }
+
+  /// Test-only teardown. Closes all boxes, clears internal references,
+  /// and allows another [initForTest] call. Registered TypeAdapters
+  /// persist — the next init is a no-op on registration thanks to the
+  /// idempotent guard in [_registerAdapters].
+  @visibleForTesting
+  Future<void> resetForTest() async {
+    await Hive.close();
+    _sessionsBox = null;
+    _dailyRecordsBox = null;
+    _aiAnalysesBox = null;
+    _interventionsBox = null;
+    _userProfileBox = null;
+    _connectorStatesBox = null;
+    _biometricRecordsBox = null;
+    _bloodworkBox = null;
+    _sessionTemplatesBox = null;
+    _activeProtocolsBox = null;
+    _bookmarksBox = null;
+    _journalBox = null;
+    _eventsBox = null;
+    _deviceIdentityBox = null;
+    _eventLog = null;
+    _initialized = false;
+  }
+
+  Future<void> _openEventLog() async {
+    _deviceIdentityBox = await Hive.openBox<String>(
+        EventLog.deviceIdentityBoxName);
+    var deviceId = _deviceIdentityBox!.get(EventLog.deviceIdentityKey);
+    if (deviceId == null) {
+      deviceId = _generateUuidV4();
+      await _deviceIdentityBox!.put(EventLog.deviceIdentityKey, deviceId);
+    }
+    _eventsBox = await Hive.openBox<BiovoltEvent>(EventLog.boxName);
+    _eventLog = EventLog(eventsBox: _eventsBox!, deviceId: deviceId);
+  }
+
+  static String _generateUuidV4() {
+    final rand = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rand.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+    String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+    final h = bytes.map(hex).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-'
+        '${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
   }
 
   /// Wipe all Hive box files if the schema version has changed.
@@ -158,66 +245,76 @@ class StorageService {
   }
 
   void _registerAdapters() {
+    // Per-adapter idempotency guard so tests that re-init or that
+    // pre-register some adapters don't collide. In production this
+    // runs exactly once, so the check is a cheap no-op.
+    void reg<T>(int id, TypeAdapter<T> adapter) {
+      if (!Hive.isAdapterRegistered(id)) Hive.registerAdapter(adapter);
+    }
+
     // -- Enums (normalized_record.dart): IDs 1-4 --
-    Hive.registerAdapter(DataSourceAdapter());       // 1
-    Hive.registerAdapter(DataQualityAdapter());      // 2
-    Hive.registerAdapter(ConnectorTypeAdapter());    // 3
-    Hive.registerAdapter(ConnectorStatusAdapter());  // 4
+    reg(1, DataSourceAdapter());
+    reg(2, DataQualityAdapter());
+    reg(3, ConnectorTypeAdapter());
+    reg(4, ConnectorStatusAdapter());
 
     // -- Biometric records: IDs 5-11 --
-    Hive.registerAdapter(HeartRateReadingAdapter()); // 5
-    Hive.registerAdapter(HRVReadingAdapter());       // 6
-    Hive.registerAdapter(EDAReadingAdapter());       // 7
-    Hive.registerAdapter(SpO2ReadingAdapter());      // 8
-    Hive.registerAdapter(TemperatureReadingAdapter()); // 9
-    Hive.registerAdapter(ECGRecordAdapter());        // 10
-    Hive.registerAdapter(TemperaturePlacementAdapter()); // 11
+    reg(5, HeartRateReadingAdapter());
+    reg(6, HRVReadingAdapter());
+    reg(7, EDAReadingAdapter());
+    reg(8, SpO2ReadingAdapter());
+    reg(9, TemperatureReadingAdapter());
+    reg(10, ECGRecordAdapter());
+    reg(11, TemperaturePlacementAdapter());
 
     // -- Sleep: IDs 12-14 --
-    Hive.registerAdapter(SleepRecordAdapter());      // 12
-    Hive.registerAdapter(SleepContributorsAdapter()); // 13
-    Hive.registerAdapter(ReadinessContributorsAdapter()); // 14
+    reg(12, SleepRecordAdapter());
+    reg(13, SleepContributorsAdapter());
+    reg(14, ReadinessContributorsAdapter());
 
     // -- Oura daily: ID 15 --
-    Hive.registerAdapter(OuraDailyRecordAdapter());  // 15
+    reg(15, OuraDailyRecordAdapter());
 
     // -- Session: IDs 16-24 --
-    Hive.registerAdapter(SessionAdapter());          // 16
-    Hive.registerAdapter(SessionContextAdapter());   // 17
-    Hive.registerAdapter(SessionActivityAdapter());  // 18
-    Hive.registerAdapter(SessionBiometricsAdapter()); // 19
-    Hive.registerAdapter(Esp32MetricsAdapter());     // 20
-    Hive.registerAdapter(PolarMetricsAdapter());     // 21
-    Hive.registerAdapter(ComputedMetricsAdapter());  // 22
-    Hive.registerAdapter(SessionSubjectiveAdapter()); // 23
-    Hive.registerAdapter(SubjectiveScoresAdapter()); // 24
+    reg(16, SessionAdapter());
+    reg(17, SessionContextAdapter());
+    reg(18, SessionActivityAdapter());
+    reg(19, SessionBiometricsAdapter());
+    reg(20, Esp32MetricsAdapter());
+    reg(21, PolarMetricsAdapter());
+    reg(22, ComputedMetricsAdapter());
+    reg(23, SessionSubjectiveAdapter());
+    reg(24, SubjectiveScoresAdapter());
 
     // -- AI analysis: ID 25 --
-    Hive.registerAdapter(AiAnalysisAdapter());       // 25
+    reg(25, AiAnalysisAdapter());
 
     // -- Interventions: IDs 26-30 --
-    Hive.registerAdapter(InterventionsAdapter());    // 26
-    Hive.registerAdapter(PeptideLogAdapter());       // 27
-    Hive.registerAdapter(SupplementLogAdapter());    // 28
-    Hive.registerAdapter(NutritionLogAdapter());     // 29
-    Hive.registerAdapter(HydrationLogAdapter());     // 30
+    reg(26, InterventionsAdapter());
+    reg(27, PeptideLogAdapter());
+    reg(28, SupplementLogAdapter());
+    reg(29, NutritionLogAdapter());
+    reg(30, HydrationLogAdapter());
 
     // -- User profile: IDs 31-32 --
-    Hive.registerAdapter(UserProfileAdapter());      // 31
-    Hive.registerAdapter(ConnectorStateAdapter());   // 32
+    reg(31, UserProfileAdapter());
+    reg(32, ConnectorStateAdapter());
 
     // -- Session type + Snapshot: IDs 33-34 --
-    Hive.registerAdapter(SessionTypeAdapter());      // 33
-    Hive.registerAdapter(SensorSnapshotAdapter());   // 34
+    reg(33, SessionTypeAdapter());
+    reg(34, SensorSnapshotAdapter());
 
     // -- Bloodwork: ID 35 --
-    Hive.registerAdapter(BloodworkAdapter());        // 35
+    reg(35, BloodworkAdapter());
 
     // -- Session templates: ID 40 --
-    Hive.registerAdapter(SessionTemplateAdapter());  // 40
+    reg(40, SessionTemplateAdapter());
 
     // -- Active protocols: ID 41 --
-    Hive.registerAdapter(ActiveProtocolAdapter());   // 41
+    reg(41, ActiveProtocolAdapter());
+
+    // -- BiovoltEvent: ID 42 --
+    reg(42, BiovoltEventAdapter());
   }
 
   /// In debug mode, verify that all registered adapters have unique typeIds.
@@ -239,6 +336,7 @@ class StorageService {
       (31, 'UserProfile'), (32, 'ConnectorState'),
       (33, 'SessionType'), (34, 'SensorSnapshot'), (35, 'Bloodwork'),
       (40, 'SessionTemplate'), (41, 'ActiveProtocol'),
+      (42, 'BiovoltEvent'),
     ];
 
     for (final (id, name) in adapters) {
@@ -249,7 +347,8 @@ class StorageService {
       ids[id] = name;
     }
 
-    debugPrint('Hive adapters registered: ${ids.length} (IDs 1-35, no collisions)');
+    debugPrint(
+        'Hive adapters registered: ${ids.length} (IDs 1-42, no collisions)');
   }
 
   // ---------------------------------------------------------------------------
@@ -410,8 +509,16 @@ class StorageService {
   // Bloodwork
   // ---------------------------------------------------------------------------
 
+  // Reference refactor (1/2): chosen as the "single-field simple write"
+  // example for the two-write pattern. Every bloodwork record is a
+  // discrete profile-level addition with a clean existing toJson, so the
+  // event payload piggybacks on the model directly.
   Future<void> saveBloodwork(Bloodwork bloodwork) async {
     await _bloodworkBox?.put(bloodwork.id, bloodwork);
+    await eventLog.append(
+      type: EventTypes.profileBloodworkAdded,
+      payload: bloodwork.toJson(),
+    );
   }
 
   Bloodwork? getBloodwork(String id) => _bloodworkBox?.get(id);
@@ -492,8 +599,17 @@ class StorageService {
   // Active Protocols
   // ---------------------------------------------------------------------------
 
+  // Reference refactor (2/2): chosen as the "frequent entity write"
+  // example. Active protocols are added/modified multiple times per
+  // day once the protocol-builder flow is live — this is the closest
+  // existing analog to the high-frequency sample writes that the rest
+  // of the refactor pass will target.
   Future<void> saveActiveProtocol(ActiveProtocol protocol) async {
     await _activeProtocolsBox?.put(protocol.id, protocol);
+    await eventLog.append(
+      type: EventTypes.protocolItemAdded,
+      payload: protocol.toJson(),
+    );
   }
 
   ActiveProtocol? getActiveProtocol(String id) =>
