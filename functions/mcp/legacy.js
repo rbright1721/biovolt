@@ -10,11 +10,7 @@ const toolRegistry = require("./tools");
 // JSON-RPC 2.0. Claude.ai connects here to read/write BioVolt health data.
 // ---------------------------------------------------------------------------
 
-exports.mcpServer = onRequest({
-  region: "us-central1",
-  cors: true,
-  timeoutSeconds: 30,
-}, async (req, res) => {
+async function mcpServerHandler(req, res) {
   // ── Handle MCP protocol discovery (GET) — public, no auth ────────────
   if (req.method === "GET") {
     res.json({
@@ -92,7 +88,15 @@ exports.mcpServer = onRequest({
       id,
     });
   }
-});
+}
+
+exports.mcpServer = onRequest({
+  region: "us-central1",
+  cors: true,
+  timeoutSeconds: 30,
+}, mcpServerHandler);
+
+exports.mcpServerHandler = mcpServerHandler;
 
 // ---------------------------------------------------------------------------
 // refreshToken — exchange a Firebase refresh token for a fresh ID token.

@@ -44,7 +44,10 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(grep -iE \"^\\(jest|mocha|ava|vitest|tap\\)$\")",
       "Bash(npm test *)",
-      "Bash(node -e \"const mcp = require\\('./mcp'\\); console.log\\(typeof mcp.mcpServer, typeof mcp.refreshToken\\);\")"
+      "Bash(node -e \"const mcp = require\\('./mcp'\\); console.log\\(typeof mcp.mcpServer, typeof mcp.refreshToken\\);\")",
+      "Bash(node -e \"const {SignJWT} = require\\('jose'\\); console.log\\(typeof SignJWT\\);\")",
+      "Bash(node -e 'console.log\\(JSON.stringify\\({ *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
