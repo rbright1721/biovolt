@@ -100,4 +100,20 @@ class EventTypes {
   // lifecycle event that the event log (which survives the wipe) should
   // record for audit purposes.
   static const appDataCleared = 'app.data_cleared';
+
+  // -- Timeline / LogEntry ----------------------------------------------
+  // User observations captured as free-text or voice notes, then
+  // upgraded by the classifier worker into typed entries. See [LogEntry].
+  // Storage-layer emit sites: saveLogEntry → entryCreated,
+  // updateLogEntryClassification → entryClassified or entryReclassified,
+  // deleteLogEntry → entryDeleted. [entryEdited] is reserved for
+  // user-driven edits of rawText/occurredAt/userNotes/tags; it will be
+  // wired from the edit flow in a later part and has no storage emit
+  // site yet — same pattern as the other type constants in this file
+  // without current callers (e.g., protocolVersionCommitted).
+  static const entryCreated = 'timeline.entry_created';
+  static const entryClassified = 'timeline.entry_classified';
+  static const entryReclassified = 'timeline.entry_reclassified';
+  static const entryEdited = 'timeline.entry_edited';
+  static const entryDeleted = 'timeline.entry_deleted';
 }

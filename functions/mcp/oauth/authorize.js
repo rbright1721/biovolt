@@ -7,11 +7,6 @@ async function handleAuthorize(req, res) {
   if (req.method === "GET") {
     return handleAuthorizeGet(req, res);
   }
-  if (req.method === "POST") {
-    // Defensive: POST at /oauth/authorize falls through to completion
-    // in case a client posts to the base path rather than /complete.
-    return handleAuthorizeComplete(req, res);
-  }
   return res.status(405).json({ error: "method_not_allowed" });
 }
 

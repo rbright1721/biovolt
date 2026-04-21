@@ -7,7 +7,6 @@ const {
 const { handleToken } = require("./oauth/token");
 const { handleRevoke } = require("./oauth/revoke");
 const { handleMcpRequest } = require("./server");
-const { mcpServerHandler } = require("./legacy");
 
 async function route(req, res) {
   const url = req.url || "/";
@@ -24,11 +23,6 @@ async function route(req, res) {
   }
   if (path === "/oauth/token") return handleToken(req, res);
   if (path === "/oauth/revoke") return handleRevoke(req, res);
-
-  // Legacy fallback — one-prompt rollback path, removed in Prompt 7.
-  if (path === "/legacy" || path.startsWith("/legacy/")) {
-    return mcpServerHandler(req, res);
-  }
 
   // Default: MCP Streamable HTTP at the root.
   return handleMcpRequest(req, res);

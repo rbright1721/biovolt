@@ -1,8 +1,5 @@
-// Note: `zod-to-json-schema` v3.25 does not support zod v4 (emits an
-// empty document). Zod 4 ships its own `toJSONSchema()` which produces
-// clean, draft-2020-12 output — we use that instead. The installed
-// zod-to-json-schema package is kept as a transitional dependency but
-// is not exercised here. See the Prompt 6 deviation note.
+// Zod 4 ships its own `toJSONSchema()` which produces clean,
+// draft-2020-12 output. We use it directly — no external converter.
 
 const { toJSONSchema } = require("zod");
 const { SCHEMAS } = require("../zod_schemas");

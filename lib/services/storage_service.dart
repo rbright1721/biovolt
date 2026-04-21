@@ -22,6 +22,7 @@ import '../models/session_type.dart';
 import '../models/sleep_record.dart';
 import '../models/active_protocol.dart';
 import '../models/health_journal_entry.dart';
+import '../models/log_entry.dart';
 import '../models/vitals_bookmark.dart';
 import '../models/session_template.dart';
 import '../models/user_profile.dart';
@@ -43,6 +44,7 @@ class StorageService {
   Box<ActiveProtocol>? _activeProtocolsBox;
   Box<String>? _bookmarksBox;
   Box<String>? _journalBox;
+  Box<LogEntry>? _logEntriesBox;
   Box<BiovoltEvent>? _eventsBox;
   Box<String>? _deviceIdentityBox;
 
@@ -76,9 +78,12 @@ class StorageService {
   static const _schemaKey = 'hive_schema_version';
 
   // Boxes wiped on a schema-version bump or during the nuclear
-  // corrupt-recovery path. The `events` and `device_identity` boxes
-  // are deliberately NOT in this list — the append-only event log and
-  // the per-install device UUID must survive schema migrations.
+  // corrupt-recovery path. The `events`, `device_identity`, and
+  // `log_entries` boxes are deliberately NOT in this list — the
+  // append-only event log, the per-install device UUID, and
+  // user-captured timeline observations must all survive schema
+  // migrations since they represent raw, re-derivable data we can't
+  // re-fetch from anywhere else.
   static const _boxNames = [
     'sessions',
     'daily_records',
@@ -151,6 +156,7 @@ class StorageService {
     _activeProtocolsBox = null;
     _bookmarksBox = null;
     _journalBox = null;
+    _logEntriesBox = null;
     _eventsBox = null;
     _deviceIdentityBox = null;
     _eventLog = null;
@@ -223,6 +229,7 @@ class StorageService {
           await Hive.openBox<ActiveProtocol>('active_protocols');
       _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
       _journalBox = await Hive.openBox<String>('health_journal');
+      _logEntriesBox = await Hive.openBox<LogEntry>('log_entries');
     } catch (e) {
       // Nuclear option — if boxes are corrupt, wipe everything and retry
       debugPrint('Hive box open failed: $e \u2014 nuking all data');
@@ -250,6 +257,10 @@ class StorageService {
           await Hive.openBox<ActiveProtocol>('active_protocols');
       _bookmarksBox = await Hive.openBox<String>('vitals_bookmarks');
       _journalBox = await Hive.openBox<String>('health_journal');
+      // Not in _boxNames, so the nuke loop above skipped it — reopening
+      // here returns the existing on-disk contents, preserving user
+      // observations through the corrupt-recovery path.
+      _logEntriesBox = await Hive.openBox<LogEntry>('log_entries');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_schemaKey, _schemaVersion);
@@ -327,6 +338,9 @@ class StorageService {
 
     // -- BiovoltEvent: ID 42 --
     reg(42, BiovoltEventAdapter());
+
+    // -- LogEntry: ID 43 --
+    reg(43, LogEntryAdapter());
   }
 
   /// In debug mode, verify that all registered adapters have unique typeIds.
@@ -348,7 +362,7 @@ class StorageService {
       (31, 'UserProfile'), (32, 'ConnectorState'),
       (33, 'SessionType'), (34, 'SensorSnapshot'), (35, 'Bloodwork'),
       (40, 'SessionTemplate'), (41, 'ActiveProtocol'),
-      (42, 'BiovoltEvent'),
+      (42, 'BiovoltEvent'), (43, 'LogEntry'),
     ];
 
     for (final (id, name) in adapters) {
@@ -360,7 +374,7 @@ class StorageService {
     }
 
     debugPrint(
-        'Hive adapters registered: ${ids.length} (IDs 1-42, no collisions)');
+        'Hive adapters registered: ${ids.length} (IDs 1-43, no collisions)');
   }
 
   // ---------------------------------------------------------------------------
@@ -693,12 +707,17 @@ class StorageService {
     await _activeProtocolsBox?.clear();
     await _bookmarksBox?.clear();
     await _journalBox?.clear();
+    await _logEntriesBox?.clear();
     // One summary event for the whole batch — per-box events would be
     // noise and there's no per-record context to preserve. The events
     // box survives clearAll, so this record sticks around.
+    // `log_entries` is cleared here even though it's not in _boxNames —
+    // _boxNames is the schema-migration wipe list, while clearAll is a
+    // user-initiated "reset everything" action. List it in the payload
+    // so the event log reflects what was actually cleared.
     await eventLog.append(
       type: EventTypes.appDataCleared,
-      payload: {'boxes': List<String>.from(_boxNames)},
+      payload: {'boxes': [..._boxNames, 'log_entries']},
     );
   }
 
@@ -959,5 +978,154 @@ class StorageService {
 
   Future<String> createNewConversation() async {
     return DateTime.now().millisecondsSinceEpoch.toString();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Log Entries (timeline)
+  // ---------------------------------------------------------------------------
+  //
+  // User observations (voice or text), initially unclassified 'other'
+  // records, upgraded by the classifier worker into typed entries. The
+  // `log_entries` box is exempt from schema-version wipes — see
+  // [_boxNames].
+
+  /// Save a new or replacement [LogEntry]. Always emits
+  /// `timeline.entry_created` — matches the saveActiveProtocol /
+  /// saveBookmark pattern of emitting a single creation type regardless
+  /// of whether this is a new id or an upsert. Edits that go through the
+  /// dedicated edit path (Part 1 UI) will emit `timeline.entry_edited`.
+  Future<void> saveLogEntry(LogEntry entry) async {
+    await _logEntriesBox?.put(entry.id, entry);
+    await eventLog.append(
+      type: EventTypes.entryCreated,
+      payload: {
+        'id': entry.id,
+        'occurredAt': entry.occurredAt.toIso8601String(),
+        'loggedAt': entry.loggedAt.toIso8601String(),
+        'type': entry.type,
+        'classificationStatus': entry.classificationStatus,
+      },
+    );
+  }
+
+  LogEntry? getLogEntry(String id) => _logEntriesBox?.get(id);
+
+  /// All entries sorted by [LogEntry.occurredAt] descending (newest first).
+  List<LogEntry> getAllLogEntries() {
+    if (_logEntriesBox == null) return [];
+    return _logEntriesBox!.values.toList()
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  }
+
+  /// Entries whose [LogEntry.occurredAt] falls within `[from, to]`
+  /// inclusive, sorted newest first.
+  List<LogEntry> getLogEntriesInRange(DateTime from, DateTime to) {
+    if (_logEntriesBox == null) return [];
+    return _logEntriesBox!.values
+        .where((e) =>
+            !e.occurredAt.isBefore(from) && !e.occurredAt.isAfter(to))
+        .toList()
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  }
+
+  /// Retry ceiling for classifier failures. After this many failed
+  /// attempts the worker stops retrying — the entry stays 'failed' and
+  /// the user can reclassify manually from the timeline UI.
+  static const _maxClassificationAttempts = 3;
+
+  /// Entries the classifier still needs to handle: fresh 'pending' plus
+  /// 'failed' entries that haven't exhausted their retry budget.
+  /// Returned oldest-first (by [LogEntry.loggedAt]) for FIFO processing.
+  List<LogEntry> getPendingClassification() {
+    if (_logEntriesBox == null) return [];
+    return _logEntriesBox!.values
+        .where((e) =>
+            e.classificationStatus == 'pending' ||
+            (e.classificationStatus == 'failed' &&
+                e.classificationAttempts < _maxClassificationAttempts))
+        .toList()
+      ..sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
+  }
+
+  /// Entries with the given [type] (e.g., 'meal', 'dose'), sorted
+  /// newest first and optionally capped.
+  List<LogEntry> getLogEntriesByType(String type, {int? limit}) {
+    if (_logEntriesBox == null) return [];
+    final matches = _logEntriesBox!.values
+        .where((e) => e.type == type)
+        .toList()
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    if (limit != null && matches.length > limit) {
+      return matches.sublist(0, limit);
+    }
+    return matches;
+  }
+
+  /// Called by the classifier worker after a classify attempt. Reads
+  /// the existing entry, increments [LogEntry.classificationAttempts],
+  /// applies the verdict via [LogEntry.copyWith], and persists.
+  ///
+  /// Emits `timeline.entry_reclassified` when the entry was already
+  /// 'classified' (i.e., this is a correction), otherwise emits
+  /// `timeline.entry_classified`. The distinction matters for the
+  /// timeline view, which renders reclassifications differently from
+  /// first-time classifications.
+  Future<void> updateLogEntryClassification(
+    String id, {
+    required String type,
+    required Map<String, dynamic>? structured,
+    required double confidence,
+    required String status,
+    String? error,
+  }) async {
+    final existing = _logEntriesBox?.get(id);
+    if (existing == null) return;
+
+    final wasAlreadyClassified =
+        existing.classificationStatus == 'classified';
+
+    final updated = existing.copyWith(
+      type: type,
+      structured: structured,
+      classificationConfidence: confidence,
+      classificationStatus: status,
+      classificationError: error,
+      classificationAttempts: existing.classificationAttempts + 1,
+    );
+    await _logEntriesBox?.put(id, updated);
+    await eventLog.append(
+      type: wasAlreadyClassified
+          ? EventTypes.entryReclassified
+          : EventTypes.entryClassified,
+      payload: {
+        'id': id,
+        'type': type,
+        'confidence': confidence,
+        'status': status,
+        'attempts': updated.classificationAttempts,
+        'error': ?error,
+      },
+    );
+  }
+
+  Future<void> deleteLogEntry(String id) async {
+    final prior = _logEntriesBox?.get(id);
+    await _logEntriesBox?.delete(id);
+    await eventLog.append(
+      type: EventTypes.entryDeleted,
+      payload: {
+        'id': id,
+        if (prior != null)
+          'occurredAt': prior.occurredAt.toIso8601String(),
+        if (prior != null) 'type': prior.type,
+      },
+    );
+  }
+
+  /// Hive box event stream for reactive UIs (Part 4 timeline view).
+  Stream<BoxEvent> watchLogEntries() {
+    final box = _logEntriesBox;
+    if (box == null) return const Stream.empty();
+    return box.watch();
   }
 }

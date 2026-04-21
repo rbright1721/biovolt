@@ -20,8 +20,7 @@
     "firebase-functions": "^5.0.0",
     "jose": "^4.15.9",
     "node-fetch": "^2.7.0",
-    "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.25.2"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "eslint": "^8.15.0",

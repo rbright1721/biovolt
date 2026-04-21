@@ -25,6 +25,23 @@ function escapeHtml(s) {
   })[c]);
 }
 
+// Escape a value for safe embedding inside an HTML <script> tag.
+// JSON.stringify produces JSON-safe but not HTML-safe output — if an
+// attacker-controlled field contains "</script>", it breaks out of the
+// script context. We escape the characters that have special meaning in
+// HTML parsing of script content: <, >, &, / (for </script>), and the
+// line/paragraph separators that some older browsers treat as line
+// terminators in JS strings.
+function escapeScriptJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\//g, "\\u002f")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function renderAuthorizePage({
   clientName,
   clientId,
@@ -251,12 +268,12 @@ function renderAuthorizePage({
 import { initializeApp } from "https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js";
 
-const firebaseConfig = ${JSON.stringify(FIREBASE_CONFIG)};
+const firebaseConfig = ${escapeScriptJson(FIREBASE_CONFIG)};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-const OAUTH_PARAMS = ${JSON.stringify(oauthParams)};
+const OAUTH_PARAMS = ${escapeScriptJson(oauthParams)};
 
 const statusEl = document.getElementById('status');
 const signInBtn = document.getElementById('signin');
@@ -298,4 +315,4 @@ signInBtn.addEventListener('click', async () => {
 </html>`;
 }
 
-module.exports = { renderAuthorizePage, escapeHtml };
+module.exports = { renderAuthorizePage, escapeHtml, escapeScriptJson };

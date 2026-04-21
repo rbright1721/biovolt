@@ -7,7 +7,6 @@ initializeApp();
 const mcp = require("./mcp");
 
 exports.mcpServer = mcp.mcpServer;
-exports.refreshToken = mcp.refreshToken;
 
 // ---------------------------------------------------------------------------
 // PubMed helpers — search for peer-reviewed studies and extract abstracts

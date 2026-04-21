@@ -47,7 +47,16 @@
       "Bash(node -e \"const mcp = require\\('./mcp'\\); console.log\\(typeof mcp.mcpServer, typeof mcp.refreshToken\\);\")",
       "Bash(node -e \"const {SignJWT} = require\\('jose'\\); console.log\\(typeof SignJWT\\);\")",
       "Bash(node -e 'console.log\\(JSON.stringify\\({ *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node functions/mcp/oauth/_fix_u2028.js)",
+      "Bash(sed -n '35,44p' functions/mcp/oauth/authorize_page.js)",
+      "Bash(git rm *)",
+      "Bash(npm uninstall *)",
+      "Bash(node *)",
+      "Bash(gcloud functions list *)",
+      "Bash(gcloud functions *)",
+      "Bash(sed -i '651,734d' ../lib/screens/settings_screen.dart)",
+      "Bash(sed -n '648,660p' ../lib/screens/settings_screen.dart)"
     ]
   }
 }
