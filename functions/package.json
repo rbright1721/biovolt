@@ -3,6 +3,7 @@
   "description": "Firebase Cloud Functions for BioVolt AI proxy",
   "scripts": {
     "lint": "eslint .",
+    "test": "jest",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
@@ -20,7 +21,8 @@
   },
   "devDependencies": {
     "eslint": "^8.15.0",
-    "eslint-config-google": "^0.14.0"
+    "eslint-config-google": "^0.14.0",
+    "jest": "^30.3.0"
   },
   "private": true
 }
