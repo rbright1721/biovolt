@@ -155,8 +155,12 @@ async function handleMcpRequest(req, res) {
     // transport validates that. Create a fresh session.
     const sessionId = randomUUID();
     const mcpServer = createMcpServer(auth);
+    // enableJsonResponse: Cloud Run does not cleanly support SSE streaming
+    // through its request/response wrapping — responses get truncated mid-stream.
+    // JSON mode returns the full response at once with Content-Length.
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => sessionId,
+      enableJsonResponse: true,
       onsessioninitialized: (id) => {
         sessions.set(id, {
           transport,
