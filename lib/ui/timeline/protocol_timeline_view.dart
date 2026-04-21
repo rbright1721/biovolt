@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../config/theme.dart';
 import '../../models/biovolt_event.dart';
@@ -194,7 +193,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Text(
         '${_formatDate(_range.start)} – ${_formatDate(_range.end)}',
-        style: GoogleFonts.jetBrainsMono(
+        style: TextStyle(
           fontSize: 10,
           color: BioVoltColors.textSecondary,
           letterSpacing: 0.5,
@@ -292,7 +291,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                   child: Text(
                     title,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: BioVoltColors.teal,
@@ -321,14 +320,14 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
                         activeColor: BioVoltColors.teal,
                         title: Text(
                           labelFor(k),
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             fontSize: 12,
                             color: BioVoltColors.textPrimary,
                           ),
                         ),
                         subtitle: Text(
                           '${counts[k]}',
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             fontSize: 10,
                             color: BioVoltColors.textSecondary,
                           ),
@@ -346,7 +345,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
                         onPressed: () => Navigator.of(ctx).pop(<String>{}),
                         child: Text(
                           'Clear',
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             color: BioVoltColors.textSecondary,
                           ),
                         ),
@@ -356,7 +355,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
                         onPressed: () => Navigator.of(ctx).pop(selected),
                         child: Text(
                           'Apply',
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             color: BioVoltColors.teal,
                           ),
                         ),
@@ -378,7 +377,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Text(
         'showing most recent $_queryLimit of $_unfilteredCount',
-        style: GoogleFonts.jetBrainsMono(
+        style: TextStyle(
           fontSize: 10,
           color: BioVoltColors.amber,
           letterSpacing: 0.5,
@@ -404,7 +403,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
             const SizedBox(height: 20),
             Text(
               'No events in this range',
-              style: GoogleFonts.jetBrainsMono(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: BioVoltColors.textPrimary,
@@ -415,7 +414,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
               Text(
                 'Try widening the time range\nor clearing filters',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.jetBrainsMono(
+                style: TextStyle(
                   fontSize: 11,
                   color: BioVoltColors.textSecondary,
                   height: 1.6,
@@ -455,7 +454,7 @@ class _ProtocolTimelineViewState extends State<ProtocolTimelineView> {
               padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
               child: Text(
                 _formatDayHeader(day),
-                style: GoogleFonts.jetBrainsMono(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: BioVoltColors.teal,
@@ -562,7 +561,7 @@ class _PresetChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: GoogleFonts.jetBrainsMono(
+          style: TextStyle(
             fontSize: 10,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             color: selected
@@ -616,7 +615,7 @@ class _FilterButton extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: GoogleFonts.jetBrainsMono(
+              style: TextStyle(
                 fontSize: 10,
                 color: color,
                 letterSpacing: 0.5,
@@ -733,7 +732,7 @@ class _CollapsedRunRow extends StatelessWidget {
                       children: [
                         Text(
                           '${run.count} $summary events',
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: BioVoltColors.textPrimary,
@@ -742,7 +741,7 @@ class _CollapsedRunRow extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           'from $source · $timeRange',
-                          style: GoogleFonts.jetBrainsMono(
+                          style: TextStyle(
                             fontSize: 11,
                             color: BioVoltColors.textSecondary,
                           ),

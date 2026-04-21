@@ -94,7 +94,7 @@ class EventLog {
     int? limit,
   }) async {
     final typeFilter = <String>{
-      if (type != null) type,
+      ?type,
       if (types != null) ...types,
     };
     Iterable<BiovoltEvent> events = _eventsBox.values;

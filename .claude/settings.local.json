@@ -36,7 +36,8 @@
       "Bash(taskkill /F /IM flutter.bat /IM dart.exe)",
       "Bash(cmd //c \"taskkill /F /IM flutter.bat\")",
       "Bash(cmd //c \"taskkill /F /IM dart.exe\")",
-      "Bash(cmd //c \"taskkill /F /IM flutter.bat /T\")"
+      "Bash(cmd //c \"taskkill /F /IM flutter.bat /T\")",
+      "Bash(cmd //c \"taskkill /F /IM dart.exe /T\")"
     ]
   }
 }

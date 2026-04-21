@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../config/theme.dart';
 import '../../models/biovolt_event.dart';
@@ -167,7 +166,7 @@ class TimelineRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.jetBrainsMono(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: BioVoltColors.textPrimary,
@@ -177,7 +176,7 @@ class TimelineRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     summary!,
-                    style: GoogleFonts.jetBrainsMono(
+                    style: TextStyle(
                       fontSize: 11,
                       color: BioVoltColors.textSecondary,
                     ),
@@ -191,7 +190,7 @@ class TimelineRow extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             formatRelativeTime(timestamp),
-            style: GoogleFonts.jetBrainsMono(
+            style: TextStyle(
               fontSize: 10,
               color: BioVoltColors.textSecondary,
               letterSpacing: 0.5,
@@ -217,7 +216,7 @@ class _PayloadKeyValueList extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Text(
           'No payload',
-          style: GoogleFonts.jetBrainsMono(
+          style: TextStyle(
             fontSize: 11,
             color: BioVoltColors.textSecondary,
             fontStyle: FontStyle.italic,
@@ -240,7 +239,7 @@ class _PayloadKeyValueList extends StatelessWidget {
                     width: 120,
                     child: Text(
                       entry.key,
-                      style: GoogleFonts.jetBrainsMono(
+                      style: TextStyle(
                         fontSize: 10,
                         color: BioVoltColors.textSecondary,
                         letterSpacing: 0.5,
@@ -250,7 +249,7 @@ class _PayloadKeyValueList extends StatelessWidget {
                   Expanded(
                     child: Text(
                       _formatValue(entry.value),
-                      style: GoogleFonts.jetBrainsMono(
+                      style: TextStyle(
                         fontSize: 11,
                         color: BioVoltColors.textPrimary,
                       ),
