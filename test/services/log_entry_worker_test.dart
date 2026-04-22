@@ -277,6 +277,29 @@ void main() {
       expect(classifier.lastContext?.activeProtocols.single.name, 'GlyNAC');
     });
 
+    test('classifier modelVersion is persisted onto the entry', () async {
+      await seed(id: 'e-mv', loggedAt: DateTime.utc(2026, 4, 20));
+      final classifier = _FakeClassifier([
+        _Response.ok(ClassificationResult(
+          logEntryId: 'e-mv',
+          type: 'dose',
+          structured: null,
+          confidence: 0.8,
+          modelVersion: 'claude-sonnet-4-5-v1',
+          classifiedAt: DateTime.utc(2026, 4, 20, 12),
+        )),
+      ]);
+      final worker = buildWorker(classifier: classifier);
+
+      await worker.processPending();
+
+      final updated = storage.getLogEntry('e-mv')!;
+      expect(updated.classificationStatus, 'classified');
+      expect(updated.classificationModelVersion, 'claude-sonnet-4-5-v1',
+          reason: 'worker must propagate result.modelVersion through '
+              'to updateLogEntryClassification');
+    });
+
     test('ClassifierUnauthenticatedException → skipped, attempts unchanged, '
         'loop breaks', () async {
       await seed(

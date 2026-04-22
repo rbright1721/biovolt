@@ -229,6 +229,7 @@ class LogEntryWorker {
           structured: result.structured,
           confidence: result.confidence,
           status: 'classified',
+          modelVersion: result.modelVersion,
         ));
     if (_disposed) return;
 

@@ -95,20 +95,7 @@ class FirestoreSync {
       final protocols = storage.getAllActiveProtocols();
 
       for (final p in protocols) {
-        await _set('protocols', p.id, {
-          'id': p.id,
-          'name': p.name,
-          'type': p.type,
-          'doseMcg': p.doseMcg,
-          'route': p.route,
-          'startDate': p.startDate.toIso8601String(),
-          'cycleLengthDays': p.cycleLengthDays,
-          'notes': p.notes,
-          'currentCycleDay': p.currentCycleDay,
-          'isOngoing':
-              p.cycleLengthDays == 0 || p.cycleLengthDays == 365,
-          'syncedAt': FieldValue.serverTimestamp(),
-        });
+        await _set('protocols', p.id, buildActiveProtocolFirestorePayload(p));
       }
 
       debugPrint(
@@ -121,20 +108,8 @@ class FirestoreSync {
   // Write-through for a single protocol save/update
   Future<void> writeProtocol(ActiveProtocol protocol) async {
     if (!canSync) return;
-    await _set('protocols', protocol.id, {
-      'id': protocol.id,
-      'name': protocol.name,
-      'type': protocol.type,
-      'doseMcg': protocol.doseMcg,
-      'route': protocol.route,
-      'startDate': protocol.startDate.toIso8601String(),
-      'cycleLengthDays': protocol.cycleLengthDays,
-      'notes': protocol.notes,
-      'currentCycleDay': protocol.currentCycleDay,
-      'isOngoing': protocol.cycleLengthDays == 0 ||
-          protocol.cycleLengthDays == 365,
-      'syncedAt': FieldValue.serverTimestamp(),
-    });
+    await _set(
+        'protocols', protocol.id, buildActiveProtocolFirestorePayload(protocol));
   }
 
   Future<void> deleteProtocol(String protocolId) async {
@@ -477,6 +452,7 @@ Map<String, dynamic> buildLogEntryFirestorePayload(LogEntry e) => {
       'classificationStatus': e.classificationStatus,
       'classificationError': e.classificationError,
       'classificationAttempts': e.classificationAttempts,
+      'classificationModelVersion': e.classificationModelVersion,
       'hrBpm': e.hrBpm,
       'hrvMs': e.hrvMs,
       'gsrUs': e.gsrUs,
@@ -488,3 +464,41 @@ Map<String, dynamic> buildLogEntryFirestorePayload(LogEntry e) => {
       'userNotes': e.userNotes,
       'syncedAt': FieldValue.serverTimestamp(),
     };
+
+/// Builds the Firestore document body for an [ActiveProtocol].
+///
+/// Same extraction rationale as [buildLogEntryFirestorePayload] — the
+/// helper is a pure function so tests can verify the field set without
+/// spinning up a Firebase harness. The `isOngoing` field here prefers
+/// the explicit [ActiveProtocol.isOngoing] value; the prior heuristic
+/// (cycleLengthDays 0 or 365) is kept as a fallback for records that
+/// predate the schema bump and therefore have a null flag.
+Map<String, dynamic> buildActiveProtocolFirestorePayload(ActiveProtocol p) {
+  final isOngoing = p.isOngoingFlag ??
+      (p.cycleLengthDays == 0 || p.cycleLengthDays == 365);
+  return <String, dynamic>{
+    'id': p.id,
+    'name': p.name,
+    'type': p.type,
+    'startDate': p.startDate.toIso8601String(),
+    'endDate': p.endDate?.toIso8601String(),
+    'cycleLengthDays': p.cycleLengthDays,
+    'doseMcg': p.doseMcg,
+    'route': p.route,
+    'notes': p.notes,
+    'isActive': p.isActive,
+    // Derived / resolved fields — included so Firestore consumers
+    // (Cloud Functions, dashboards) don't need to re-derive.
+    'currentCycleDay': p.currentCycleDay,
+    'isOngoing': isOngoing,
+    // Extension fields added for the Part 2.5 classifier.
+    'doseDisplay': p.doseDisplay,
+    'frequency': p.frequency,
+    'frequencyCustom': p.frequencyCustom,
+    'timesOfDayMinutes': p.timesOfDayMinutes,
+    'endReason': p.endReason,
+    'measurementTargets': p.measurementTargets,
+    'measurementTargetsNotes': p.measurementTargetsNotes,
+    'syncedAt': FieldValue.serverTimestamp(),
+  };
+}

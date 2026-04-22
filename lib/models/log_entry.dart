@@ -123,6 +123,19 @@ class LogEntry {
   @HiveField(19)
   final String? userNotes;
 
+  /// Version tag of the classifier that produced the current
+  /// classification. Null until classified. Examples:
+  ///   'stub-v0'                — Part 2 stub
+  ///   'claude-sonnet-4-5-v1'   — Part 2.5 real classifier, prompt v1
+  ///   'user_corrected'         — user manually set classification
+  ///                              (future feature)
+  ///
+  /// Required for rollback, A/B analysis, and data provenance:
+  /// knowing which classifier produced a verdict lets us invalidate
+  /// and reclassify in batch when a prompt regresses.
+  @HiveField(20)
+  final String? classificationModelVersion;
+
   // Private constructor — used by the factory below and by the
   // generated Hive adapter (via the public `LogEntry(...)` factory,
   // which forwards through here with both timestamps already resolved).
@@ -147,6 +160,7 @@ class LogEntry {
     required this.protocolIdAtTime,
     required this.tags,
     required this.userNotes,
+    required this.classificationModelVersion,
   });
 
   /// Unnamed factory — resolves timestamp defaults so that when both
@@ -178,6 +192,7 @@ class LogEntry {
     String? protocolIdAtTime,
     List<String>? tags,
     String? userNotes,
+    String? classificationModelVersion,
   }) {
     final resolvedLoggedAt = loggedAt ?? DateTime.now();
     final resolvedOccurredAt = occurredAt ?? resolvedLoggedAt;
@@ -202,6 +217,7 @@ class LogEntry {
       protocolIdAtTime: protocolIdAtTime,
       tags: tags,
       userNotes: userNotes,
+      classificationModelVersion: classificationModelVersion,
     );
   }
 
@@ -226,6 +242,7 @@ class LogEntry {
         'protocolIdAtTime': protocolIdAtTime,
         'tags': tags,
         'userNotes': userNotes,
+        'classificationModelVersion': classificationModelVersion,
       };
 
   factory LogEntry.fromJson(Map<String, dynamic> json) => LogEntry(
@@ -252,6 +269,9 @@ class LogEntry {
         protocolIdAtTime: json['protocolIdAtTime'] as String?,
         tags: (json['tags'] as List?)?.map((e) => e as String).toList(),
         userNotes: json['userNotes'] as String?,
+        // Null-safe read — v1 records predating this field parse cleanly.
+        classificationModelVersion:
+            json['classificationModelVersion'] as String?,
       );
 
   /// Returns a new [LogEntry] with fields replaced by the provided
@@ -282,6 +302,7 @@ class LogEntry {
     String? protocolIdAtTime,
     List<String>? tags,
     String? userNotes,
+    String? classificationModelVersion,
   }) =>
       LogEntry._(
         id: id ?? this.id,
@@ -308,5 +329,7 @@ class LogEntry {
         protocolIdAtTime: protocolIdAtTime ?? this.protocolIdAtTime,
         tags: tags ?? this.tags,
         userNotes: userNotes ?? this.userNotes,
+        classificationModelVersion:
+            classificationModelVersion ?? this.classificationModelVersion,
       );
 }

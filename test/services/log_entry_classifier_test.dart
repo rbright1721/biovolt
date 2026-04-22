@@ -195,6 +195,118 @@ void main() {
       expect((recents.single as Map)['rawText'], 'ate eggs');
     });
 
+    // -----------------------------------------------------------------
+    // Schema extension payload — real fields vs. synthesis fallback.
+    // -----------------------------------------------------------------
+
+    test('payload prefers real doseDisplay when set', () async {
+      final callable = _FakeCallable(responseData: _validResponse());
+      final classifier =
+          LogEntryClassifier(functions: _FakeFunctions(callable: callable));
+
+      final protocol = ActiveProtocol(
+        id: 'p-real',
+        name: 'NAC',
+        type: 'supplement',
+        startDate: DateTime(2026, 4, 1),
+        cycleLengthDays: 30,
+        doseMcg: 500,
+        route: 'oral',
+        isActive: true,
+        doseDisplay: '2 capsules',
+      );
+      await classifier.classify(
+          entry: _entry(), context: _ctx(activeProtocols: [protocol]));
+
+      final sent = callable.calls.single as Map;
+      final p = (sent['context']['activeProtocols'] as List).single
+          as Map;
+      expect(p['doseDisplay'], '2 capsules',
+          reason: 'real field wins over synthesis');
+    });
+
+    test('payload falls back to synthesized doseDisplay when the real field '
+        'is null', () async {
+      final callable = _FakeCallable(responseData: _validResponse());
+      final classifier =
+          LogEntryClassifier(functions: _FakeFunctions(callable: callable));
+
+      final protocol = ActiveProtocol(
+        id: 'p-synth',
+        name: 'BPC-157',
+        type: 'peptide',
+        startDate: DateTime(2026, 4, 1),
+        cycleLengthDays: 30,
+        doseMcg: 250,
+        route: 'sub-q',
+        isActive: true,
+        // doseDisplay intentionally unset → synthesis path.
+      );
+      await classifier.classify(
+          entry: _entry(), context: _ctx(activeProtocols: [protocol]));
+
+      final sent = callable.calls.single as Map;
+      final p = (sent['context']['activeProtocols'] as List).single
+          as Map;
+      expect((p['doseDisplay'] as String).contains('250mcg'), isTrue,
+          reason: 'synthesised fallback from doseMcg + route');
+      expect((p['doseDisplay'] as String).contains('sub-q'), isTrue);
+    });
+
+    test('payload sends real measurementTargets when set', () async {
+      final callable = _FakeCallable(responseData: _validResponse());
+      final classifier =
+          LogEntryClassifier(functions: _FakeFunctions(callable: callable));
+
+      final protocol = ActiveProtocol(
+        id: 'p-mt',
+        name: 'Creatine',
+        type: 'supplement',
+        startDate: DateTime(2026, 4, 1),
+        cycleLengthDays: 0,
+        doseMcg: 5000,
+        route: 'oral',
+        isActive: true,
+        measurementTargets: const ['recovery', 'energy'],
+        frequency: 'once_daily',
+      );
+      await classifier.classify(
+          entry: _entry(), context: _ctx(activeProtocols: [protocol]));
+
+      final sent = callable.calls.single as Map;
+      final p = (sent['context']['activeProtocols'] as List).single
+          as Map;
+      expect(p['measurementTargets'], ['recovery', 'energy']);
+      expect(p['frequency'], 'once_daily');
+    });
+
+    test('payload sends empty array / empty string when extension '
+        'fields are null', () async {
+      final callable = _FakeCallable(responseData: _validResponse());
+      final classifier =
+          LogEntryClassifier(functions: _FakeFunctions(callable: callable));
+
+      final protocol = ActiveProtocol(
+        id: 'p-legacy',
+        name: 'legacy',
+        type: 'supplement',
+        startDate: DateTime(2026, 4, 1),
+        cycleLengthDays: 30,
+        doseMcg: 100,
+        route: 'oral',
+        isActive: true,
+        // measurementTargets and frequency intentionally null.
+      );
+      await classifier.classify(
+          entry: _entry(), context: _ctx(activeProtocols: [protocol]));
+
+      final sent = callable.calls.single as Map;
+      final p = (sent['context']['activeProtocols'] as List).single
+          as Map;
+      expect(p['measurementTargets'], const <String>[]);
+      expect(p['frequency'], '');
+    });
+
     test('null structured in response maps to null', () async {
       final callable = _FakeCallable(
           responseData: _validResponse(structured: null));

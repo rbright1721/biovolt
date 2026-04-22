@@ -24,6 +24,7 @@ void main() {
       classificationStatus: 'classified',
       classificationError: null,
       classificationAttempts: 1,
+      classificationModelVersion: 'claude-sonnet-4-5-v1',
       hrBpm: 62,
       hrvMs: 48,
       gsrUs: 2.1,
@@ -49,6 +50,7 @@ void main() {
     expect(payload['classificationStatus'], 'classified');
     expect(payload['classificationError'], isNull);
     expect(payload['classificationAttempts'], 1);
+    expect(payload['classificationModelVersion'], 'claude-sonnet-4-5-v1');
     expect(payload['hrBpm'], 62);
     expect(payload['hrvMs'], 48);
     expect(payload['gsrUs'], 2.1);
@@ -62,8 +64,9 @@ void main() {
     // syncedAt uses Firestore's server-timestamp sentinel.
     expect(payload['syncedAt'], isA<FieldValue>());
 
-    // All 20 model fields + syncedAt = 21 keys, nothing extra.
-    expect(payload.length, 21);
+    // All 21 model fields (20 original + classificationModelVersion)
+    // + syncedAt = 22 keys, nothing extra.
+    expect(payload.length, 22);
   });
 
   test('payload preserves nulls rather than dropping missing fields',
@@ -80,6 +83,7 @@ void main() {
     expect(payload['rawAudioPath'], isNull);
     expect(payload['structured'], isNull);
     expect(payload['classificationConfidence'], isNull);
+    expect(payload['classificationModelVersion'], isNull);
     expect(payload['hrBpm'], isNull);
     expect(payload['protocolIdAtTime'], isNull);
     expect(payload['tags'], isNull);
@@ -88,7 +92,7 @@ void main() {
     expect(payload['type'], 'other');
     expect(payload['classificationStatus'], 'pending');
     expect(payload['classificationAttempts'], 0);
-    // Same 21 keys — missing values become nulls, not omissions.
-    expect(payload.length, 21);
+    // Same 22 keys — missing values become nulls, not omissions.
+    expect(payload.length, 22);
   });
 }

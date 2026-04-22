@@ -240,12 +240,13 @@ class LogEntryClassifier {
   //   context.fastingHours      number or null
   //   context.recentEntries     list of {type, rawText, occurredAt}
   //
-  // ActiveProtocol note: the model doesn't carry `doseDisplay`,
-  // `frequency`, or `measurementTargets`. We synthesize `doseDisplay`
-  // from `doseMcg`+`route`, set the others to empty/empty-list. Part
-  // 2's server validator only checks `activeProtocols` is an array;
-  // item-level shape is loose, so this sends cleanly. Part 2.5 may
-  // want real values here — tracked as follow-up.
+  // ActiveProtocol note: as of the Part 2.6-prep schema additions the
+  // model now carries real [ActiveProtocol.doseDisplay],
+  // [ActiveProtocol.frequency], and [ActiveProtocol.measurementTargets]
+  // fields — but they're nullable, since records created before the
+  // schema bump won't have values. We prefer the real values when
+  // present and fall back to synthesis / defaults otherwise, so
+  // pre-migration protocols still send a best-effort payload.
   // ---------------------------------------------------------------------------
 
   Map<String, dynamic> _buildPayload({
@@ -272,10 +273,19 @@ class LogEntryClassifier {
                   'type': p.type,
                   'cycleDay': p.currentCycleDay,
                   'cycleLength': p.cycleLengthDays,
-                  'doseDisplay': _synthesizeDoseDisplay(p),
+                  // Real value wins; fall back to synthesis for
+                  // pre-migration records where doseDisplay is null.
+                  'doseDisplay':
+                      p.doseDisplay ?? _synthesizeDoseDisplay(p),
                   'route': p.route,
-                  'frequency': '',
-                  'measurementTargets': const <String>[],
+                  // Empty string rather than null preserves Part 2's
+                  // schema tolerance for older callers.
+                  'frequency': p.frequency ?? '',
+                  // Null and empty-list are semantically equivalent
+                  // (user hasn't specified targets) — normalize to []
+                  // so the server always sees a list.
+                  'measurementTargets':
+                      p.measurementTargets ?? const <String>[],
                 })
             .toList(),
         'fastingHours': context.fastingHours,
@@ -290,6 +300,9 @@ class LogEntryClassifier {
     };
   }
 
+  /// Fallback used when [ActiveProtocol.doseDisplay] is null — i.e.
+  /// the protocol was created before the schema extension. Emits
+  /// something like "250mcg sub-q" from [doseMcg] + [route].
   static String _synthesizeDoseDisplay(ActiveProtocol p) {
     if (p.doseMcg <= 0) return '';
     final amount = p.doseMcg >= 1000

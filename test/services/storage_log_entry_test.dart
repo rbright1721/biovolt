@@ -291,6 +291,68 @@ void main() {
       expect(classified, isEmpty);
     });
 
+    // -- modelVersion propagation (Part 2.6-prep) ------------------------
+
+    test('updateLogEntryClassification with modelVersion sets the field and '
+        'includes it in the event payload', () async {
+      await storage.saveLogEntry(make('mv-1',
+          classificationStatus: 'pending'));
+
+      await storage.updateLogEntryClassification(
+        'mv-1',
+        type: 'dose',
+        structured: null,
+        confidence: 0.9,
+        status: 'classified',
+        modelVersion: 'claude-sonnet-4-5-v1',
+      );
+
+      final updated = storage.getLogEntry('mv-1')!;
+      expect(updated.classificationModelVersion, 'claude-sonnet-4-5-v1');
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.entryClassified);
+      expect(events.last.payload['modelVersion'],
+          'claude-sonnet-4-5-v1');
+    });
+
+    test('updateLogEntryClassification without modelVersion preserves the '
+        'existing value — a failure-path update must not clobber a good one',
+        () async {
+      // Set up an entry that's already been classified with a real
+      // model version.
+      await storage.saveLogEntry(make('mv-2',
+          classificationStatus: 'pending'));
+      await storage.updateLogEntryClassification(
+        'mv-2',
+        type: 'dose',
+        structured: null,
+        confidence: 0.9,
+        status: 'classified',
+        modelVersion: 'claude-sonnet-4-5-v1',
+      );
+      expect(storage.getLogEntry('mv-2')!.classificationModelVersion,
+          'claude-sonnet-4-5-v1');
+
+      // Simulate a later retry that failed (worker's failure path
+      // doesn't pass modelVersion). The prior version must stick.
+      await storage.updateLogEntryClassification(
+        'mv-2',
+        type: 'dose',
+        structured: null,
+        confidence: 0.0,
+        status: 'failed',
+        error: 'transient network blip',
+        // modelVersion omitted.
+      );
+
+      final after = storage.getLogEntry('mv-2')!;
+      expect(after.classificationStatus, 'failed');
+      expect(after.classificationModelVersion, 'claude-sonnet-4-5-v1',
+          reason: 'prior modelVersion must not be cleared by an '
+              'update that omits the argument');
+    });
+
     test(
         'updateLogEntryClassification with status=failed preserves error and bumps attempts',
         () async {

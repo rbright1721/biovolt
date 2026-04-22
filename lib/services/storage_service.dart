@@ -1093,6 +1093,7 @@ class StorageService {
     required double confidence,
     required String status,
     String? error,
+    String? modelVersion,
   }) async {
     final existing = _logEntriesBox?.get(id);
     if (existing == null) return;
@@ -1107,6 +1108,11 @@ class StorageService {
       classificationStatus: status,
       classificationError: error,
       classificationAttempts: existing.classificationAttempts + 1,
+      // Preserve the prior model version when the caller doesn't
+      // provide one (e.g. a failure-path update). A null argument
+      // here must NOT clobber a previously-recorded version.
+      classificationModelVersion:
+          modelVersion ?? existing.classificationModelVersion,
     );
     await _logEntriesBox?.put(id, updated);
     await eventLog.append(
@@ -1120,6 +1126,7 @@ class StorageService {
         'status': status,
         'attempts': updated.classificationAttempts,
         'error': ?error,
+        'modelVersion': ?updated.classificationModelVersion,
       },
     );
   }

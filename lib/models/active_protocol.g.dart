@@ -27,13 +27,21 @@ class ActiveProtocolAdapter extends TypeAdapter<ActiveProtocol> {
       route: fields[7] as String,
       notes: fields[8] as String?,
       isActive: fields[9] as bool,
+      doseDisplay: fields[10] as String?,
+      frequency: fields[11] as String?,
+      frequencyCustom: fields[12] as String?,
+      timesOfDayMinutes: (fields[13] as List?)?.cast<int>(),
+      isOngoingFlag: fields[14] as bool?,
+      endReason: fields[15] as String?,
+      measurementTargets: (fields[16] as List?)?.cast<String>(),
+      measurementTargetsNotes: fields[17] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ActiveProtocol obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +61,23 @@ class ActiveProtocolAdapter extends TypeAdapter<ActiveProtocol> {
       ..writeByte(8)
       ..write(obj.notes)
       ..writeByte(9)
-      ..write(obj.isActive);
+      ..write(obj.isActive)
+      ..writeByte(10)
+      ..write(obj.doseDisplay)
+      ..writeByte(11)
+      ..write(obj.frequency)
+      ..writeByte(12)
+      ..write(obj.frequencyCustom)
+      ..writeByte(13)
+      ..write(obj.timesOfDayMinutes)
+      ..writeByte(14)
+      ..write(obj.isOngoingFlag)
+      ..writeByte(15)
+      ..write(obj.endReason)
+      ..writeByte(16)
+      ..write(obj.measurementTargets)
+      ..writeByte(17)
+      ..write(obj.measurementTargetsNotes);
   }
 
   @override

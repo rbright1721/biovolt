@@ -37,13 +37,14 @@ class LogEntryAdapter extends TypeAdapter<LogEntry> {
       protocolIdAtTime: fields[17] as String?,
       tags: (fields[18] as List?)?.cast<String>(),
       userNotes: fields[19] as String?,
+      classificationModelVersion: fields[20] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, LogEntry obj) {
     writer
-      ..writeByte(20)
+      ..writeByte(21)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -83,7 +84,9 @@ class LogEntryAdapter extends TypeAdapter<LogEntry> {
       ..writeByte(18)
       ..write(obj.tags)
       ..writeByte(19)
-      ..write(obj.userNotes);
+      ..write(obj.userNotes)
+      ..writeByte(20)
+      ..write(obj.classificationModelVersion);
   }
 
   @override

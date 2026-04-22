@@ -29,6 +29,7 @@ void main() {
       expect(entry.protocolIdAtTime, isNull);
       expect(entry.tags, isNull);
       expect(entry.userNotes, isNull);
+      expect(entry.classificationModelVersion, isNull);
     });
 
     test(
@@ -128,6 +129,25 @@ void main() {
       expect(parsed.type, 'other');
       expect(parsed.classificationStatus, 'pending');
       expect(parsed.classificationAttempts, 0);
+      // v1 JSON predating this field parses with null — required for
+      // forward-compatible Firestore reads of older log entries.
+      expect(parsed.classificationModelVersion, isNull);
+    });
+
+    test('classificationModelVersion round-trips when set', () {
+      final original = LogEntry(
+        id: 'cmv-1',
+        rawText: 'x',
+        occurredAt: DateTime.utc(2026, 4, 20),
+        loggedAt: DateTime.utc(2026, 4, 20),
+        type: 'dose',
+        classificationStatus: 'classified',
+        classificationConfidence: 0.9,
+        classificationAttempts: 1,
+        classificationModelVersion: 'claude-sonnet-4-5-v1',
+      );
+      final round = LogEntry.fromJson(original.toJson());
+      expect(round.classificationModelVersion, 'claude-sonnet-4-5-v1');
     });
   });
 
@@ -166,6 +186,32 @@ void main() {
       expect(updated.tags, original.tags);
       expect(updated.userNotes, original.userNotes);
       expect(updated.hrBpm, original.hrBpm);
+    });
+
+    test('copyWith(classificationModelVersion: x) updates only that field',
+        () {
+      final original = LogEntry(
+        id: 'cmv-cw',
+        rawText: 'x',
+        occurredAt: DateTime.utc(2026, 4, 20),
+        loggedAt: DateTime.utc(2026, 4, 20),
+        type: 'meal',
+        classificationStatus: 'classified',
+        classificationConfidence: 0.8,
+        classificationAttempts: 1,
+      );
+      expect(original.classificationModelVersion, isNull);
+
+      final updated =
+          original.copyWith(classificationModelVersion: 'stub-v0');
+
+      expect(updated.classificationModelVersion, 'stub-v0');
+      // Every other field untouched.
+      expect(updated.type, 'meal');
+      expect(updated.classificationStatus, 'classified');
+      expect(updated.classificationConfidence, 0.8);
+      expect(updated.classificationAttempts, 1);
+      expect(updated.rawText, 'x');
     });
   });
 }
