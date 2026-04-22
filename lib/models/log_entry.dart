@@ -65,8 +65,18 @@ class LogEntry {
   @HiveField(7)
   final double? classificationConfidence;
 
-  /// Worker state machine: 'pending' | 'classified' | 'skipped'
-  /// | 'failed' | 'user_corrected'.
+  /// Worker state machine — see [LogEntryWorker] for transitions:
+  ///   'pending'            initial state, ready for worker
+  ///   'classified'         worker succeeded; [type] holds the result
+  ///   'skipped'            worker couldn't proceed (e.g. not signed
+  ///                        in); re-queues next launch or next watch
+  ///                        event; does NOT count against attempts
+  ///   'failed'             last attempt failed; will retry as long as
+  ///                        [classificationAttempts] < 3
+  ///   'permanently_failed' exhausted retries OR server reported an
+  ///                        invalid-argument error; never retried
+  ///                        automatically, user must reclassify
+  ///   'user_corrected'     user manually fixed the classification
   @HiveField(8)
   final String classificationStatus;
 

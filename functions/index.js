@@ -5,8 +5,10 @@ const fetch = require("node-fetch");
 initializeApp();
 
 const mcp = require("./mcp");
+const classifyLogEntryModule = require("./classify_log_entry");
 
 exports.mcpServer = mcp.mcpServer;
+exports.classifyLogEntry = classifyLogEntryModule.classifyLogEntry;
 
 // ---------------------------------------------------------------------------
 // PubMed helpers — search for peer-reviewed studies and extract abstracts

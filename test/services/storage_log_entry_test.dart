@@ -156,6 +156,74 @@ void main() {
       );
     });
 
+    test(
+        'getPendingClassification: includes skipped regardless of attempts, '
+        'excludes permanently_failed', () async {
+      // Skipped with zero attempts (the common case — worker bailed out
+      // before even trying) and skipped with attempts > 0 (edge case)
+      // both come back.
+      await storage.saveLogEntry(make('skipped-zero',
+          classificationStatus: 'skipped',
+          classificationAttempts: 0,
+          loggedAt: DateTime(2026, 4, 20, 9)));
+      await storage.saveLogEntry(make('skipped-with-attempts',
+          classificationStatus: 'skipped',
+          classificationAttempts: 2,
+          loggedAt: DateTime(2026, 4, 20, 10)));
+      await storage.saveLogEntry(make('pending-fresh',
+          classificationStatus: 'pending',
+          loggedAt: DateTime(2026, 4, 20, 11)));
+      // Permanently-failed: attempts exhausted, server gave up. Must
+      // NOT re-enter the queue automatically.
+      await storage.saveLogEntry(make('permanently_failed-1',
+          classificationStatus: 'permanently_failed',
+          classificationAttempts: 3,
+          loggedAt: DateTime(2026, 4, 20, 8)));
+      // Permanently-failed via invalid-argument at attempt 1 —
+      // attempts doesn't have to equal 3, the status alone suffices.
+      await storage.saveLogEntry(make('permanently_failed-early',
+          classificationStatus: 'permanently_failed',
+          classificationAttempts: 1,
+          loggedAt: DateTime(2026, 4, 20, 7)));
+      await storage.saveLogEntry(make('user_corrected-excluded',
+          classificationStatus: 'user_corrected',
+          classificationAttempts: 1,
+          loggedAt: DateTime(2026, 4, 20, 6)));
+
+      final pending = storage.getPendingClassification();
+      expect(
+        pending.map((e) => e.id).toList(),
+        // Oldest-first by loggedAt — skipped and pending come through.
+        ['skipped-zero', 'skipped-with-attempts', 'pending-fresh'],
+      );
+      expect(
+        pending.any((e) => e.classificationStatus == 'permanently_failed'),
+        isFalse,
+      );
+      expect(
+        pending.any((e) => e.classificationStatus == 'user_corrected'),
+        isFalse,
+      );
+    });
+
+    test('markLogEntrySkipped sets status=skipped without incrementing '
+        'attempts, and the entry re-enters the pending queue', () async {
+      await storage.saveLogEntry(make('sk-1',
+          classificationStatus: 'pending',
+          classificationAttempts: 0));
+
+      await storage.markLogEntrySkipped('sk-1', error: 'not signed in');
+
+      final updated = storage.getLogEntry('sk-1')!;
+      expect(updated.classificationStatus, 'skipped');
+      expect(updated.classificationError, 'not signed in');
+      expect(updated.classificationAttempts, 0,
+          reason: 'skipped is environmental — no attempt consumed');
+
+      final pending = storage.getPendingClassification();
+      expect(pending.map((e) => e.id), contains('sk-1'));
+    });
+
     // -- Classifier update path ------------------------------------------
 
     test(

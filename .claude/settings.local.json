@@ -56,7 +56,15 @@
       "Bash(gcloud functions list *)",
       "Bash(gcloud functions *)",
       "Bash(sed -i '651,734d' ../lib/screens/settings_screen.dart)",
-      "Bash(sed -n '648,660p' ../lib/screens/settings_screen.dart)"
+      "Bash(sed -n '648,660p' ../lib/screens/settings_screen.dart)",
+      "Bash(awk '{print $1}')",
+      "Bash(grep -oE \"lib\\\\\\\\\\\\\\\\[a-z_/\\\\\\\\\\\\\\\\]+\\\\.dart\")",
+      "Bash(awk -F ' - ' '/info|warning|error/ {print $3}')",
+      "Bash(awk -F : '{print $1}')",
+      "Bash(awk 'NR==62 {print length\\($0\\)}' /c/Users/jbrig/StudioProjects/biovolt/lib/screens/session_history_screen.dart)",
+      "Bash(awk 'NR==62' /c/Users/jbrig/StudioProjects/biovolt/lib/screens/session_history_screen.dart)",
+      "Bash(npx jest *)",
+      "Bash(firebase use *)"
     ]
   }
 }

@@ -14,6 +14,9 @@ import 'screens/pre_session_screen.dart';
 import 'services/ai_service.dart';
 import 'services/background_service.dart';
 import 'services/ble_service.dart';
+import 'services/context_inferrer.dart';
+import 'services/log_entry_classifier.dart';
+import 'services/log_entry_worker.dart';
 import 'services/oura_sync_service.dart';
 import 'services/prompt_builder.dart';
 import 'services/session_recorder.dart';
@@ -98,6 +101,18 @@ void main() async {
     promptBuilder: promptBuilder,
   );
 
+  // LogEntry classification worker. Polls the pending queue at app
+  // launch (catch-up) and subscribes to the log-entries box for live
+  // processing while the app is open. Worker lifetime is the app's
+  // foreground lifetime — no WorkManager, no BGTaskScheduler. Stopped
+  // in BioVoltApp.dispose().
+  final logEntryWorker = LogEntryWorker(
+    storage: storageService,
+    classifier: LogEntryClassifier(),
+    contextInferrer: ContextInferrer(storage: storageService),
+  );
+  logEntryWorker.start();
+
   // First-launch detection
   final profile = storageService.getUserProfile();
   final firstLaunch = profile == null;
@@ -131,6 +146,7 @@ void main() async {
     bleService: bleService,
     sessionRecorder: sessionRecorder,
     trendAnalyst: trendAnalyst,
+    logEntryWorker: logEntryWorker,
     firstLaunch: firstLaunch,
   ));
 }

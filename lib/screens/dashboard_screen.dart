@@ -12,6 +12,7 @@ import '../services/ble_service.dart';
 import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 import '../widgets/live_waveform.dart';
+import '../widgets/log_entry_sheet.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_info_sheet.dart';
 import 'template_launcher_screen.dart';
@@ -316,9 +317,14 @@ class DashboardScreen extends StatelessWidget {
   // Vitals bookmark
   // -------------------------------------------------------------------------
 
+  // The pill now opens the [LogEntrySheet] instead of the bookmark
+  // sheet. [_showBookmarkSheet] below is intentionally preserved —
+  // the bookmark creation path is still used by the journal screen's
+  // intent detection and star-toggle flows, and the analysis screen's
+  // nearby-bookmarks panel still reads saved bookmarks.
   Widget _buildBookmarkButton(BuildContext context) {
     return GestureDetector(
-      onTap: () => _showBookmarkSheet(context),
+      onTap: () => LogEntrySheet.show(context),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -329,11 +335,11 @@ class DashboardScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.bookmark_add_rounded,
-                size: 14, color: BioVoltColors.textSecondary),
+            const Icon(Icons.edit_note_rounded,
+                size: 16, color: BioVoltColors.textSecondary),
             const SizedBox(width: 8),
             Text(
-              'Quick vitals bookmark',
+              'Quick log',
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11,
                 color: BioVoltColors.textSecondary,
@@ -355,6 +361,14 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  // Preserved intentionally even though the pill button no longer
+  // calls it. The bookmark creation path is still used elsewhere
+  // (journal screen intent detection, journal star-toggle) and the
+  // analysis screen's nearby-bookmarks panel still reads bookmarks.
+  // A future session may re-surface this sheet from a different entry
+  // point; deleting it now would churn. See `_buildBookmarkButton`
+  // comment for the migration context.
+  // ignore: unused_element
   void _showBookmarkSheet(BuildContext context) {
     final state = context.read<SensorsBloc>().state;
 

@@ -5,6 +5,7 @@ import '../models/active_protocol.dart';
 import '../models/ai_analysis.dart';
 import '../models/bloodwork.dart';
 import '../models/health_journal_entry.dart';
+import '../models/log_entry.dart';
 import '../models/session.dart';
 import '../models/vitals_bookmark.dart';
 import 'storage_service.dart';
@@ -47,6 +48,7 @@ class FirestoreSync {
         syncJournal(storage),
         syncBloodwork(storage),
         syncBookmarks(storage),
+        syncLogEntries(storage),
       ]);
       debugPrint('FirestoreSync: full sync complete');
     } catch (e) {
@@ -403,6 +405,37 @@ class FirestoreSync {
     });
   }
 
+  // ── Log entries ───────────────────────────────────
+  // Raw user observations captured via the Quick Log pill on the
+  // dashboard. Written to `users/{uid}/log_entries/{id}`. The
+  // classifier Cloud Function (Part 2) reads from this same path.
+
+  Future<void> syncLogEntries(StorageService storage) async {
+    if (!canSync) return;
+    try {
+      final entries = storage.getAllLogEntries();
+      for (final e in entries) {
+        await _set('log_entries', e.id, _logEntryPayload(e));
+      }
+      debugPrint(
+          'FirestoreSync: ${entries.length} log entries synced');
+    } catch (e) {
+      debugPrint('FirestoreSync.syncLogEntries error: $e');
+    }
+  }
+
+  Future<void> writeLogEntry(LogEntry entry) async {
+    if (!canSync) return;
+    await _set('log_entries', entry.id, _logEntryPayload(entry));
+  }
+
+  Future<void> deleteLogEntry(String id) async {
+    await _delete('log_entries', id);
+  }
+
+  Map<String, dynamic> _logEntryPayload(LogEntry e) =>
+      buildLogEntryFirestorePayload(e);
+
   // ── Write helpers ──────────────────────────────────
   Future<void> _set(String collection, String docId,
       Map<String, dynamic> data) async {
@@ -425,3 +458,33 @@ class FirestoreSync {
     }
   }
 }
+
+/// Builds the Firestore document body for a [LogEntry].
+///
+/// Pulled out of the [FirestoreSync] class so tests can assert the
+/// field shape without constructing the [FirestoreSync] singleton,
+/// whose `_auth` field would access [FirebaseAuth.instance] during
+/// initialization and crash without a Firebase test harness.
+Map<String, dynamic> buildLogEntryFirestorePayload(LogEntry e) => {
+      'id': e.id,
+      'occurredAt': e.occurredAt.toIso8601String(),
+      'loggedAt': e.loggedAt.toIso8601String(),
+      'rawText': e.rawText,
+      'rawAudioPath': e.rawAudioPath,
+      'type': e.type,
+      'structured': e.structured,
+      'classificationConfidence': e.classificationConfidence,
+      'classificationStatus': e.classificationStatus,
+      'classificationError': e.classificationError,
+      'classificationAttempts': e.classificationAttempts,
+      'hrBpm': e.hrBpm,
+      'hrvMs': e.hrvMs,
+      'gsrUs': e.gsrUs,
+      'skinTempF': e.skinTempF,
+      'spo2Percent': e.spo2Percent,
+      'ecgHrBpm': e.ecgHrBpm,
+      'protocolIdAtTime': e.protocolIdAtTime,
+      'tags': e.tags,
+      'userNotes': e.userNotes,
+      'syncedAt': FieldValue.serverTimestamp(),
+    };

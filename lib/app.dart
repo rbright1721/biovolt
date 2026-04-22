@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -19,6 +21,7 @@ import 'screens/settings_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
+import 'services/log_entry_worker.dart';
 import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
 import 'services/storage_service.dart';
@@ -30,6 +33,7 @@ class BioVoltApp extends StatefulWidget {
   final BleService bleService;
   final SessionRecorder sessionRecorder;
   final TrendAnalyst trendAnalyst;
+  final LogEntryWorker logEntryWorker;
   final bool firstLaunch;
 
   const BioVoltApp({
@@ -38,6 +42,7 @@ class BioVoltApp extends StatefulWidget {
     required this.bleService,
     required this.sessionRecorder,
     required this.trendAnalyst,
+    required this.logEntryWorker,
     this.firstLaunch = false,
   });
 
@@ -83,6 +88,10 @@ class _BioVoltAppState extends State<BioVoltApp>
     WidgetsBinding.instance.removeObserver(this);
     widget.bleService.dispose();
     widget.sessionRecorder.dispose();
+    // Fire-and-forget — LogEntryWorker.dispose just cancels a Timer
+    // and a StreamSubscription, nothing async needs to complete before
+    // app teardown.
+    unawaited(widget.logEntryWorker.dispose());
     super.dispose();
   }
 

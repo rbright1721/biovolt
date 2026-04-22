@@ -7,6 +7,7 @@ import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
 import '../config/theme.dart';
+import '../models/log_entry.dart';
 import '../models/session.dart';
 import '../models/session_type.dart';
 import '../models/vitals_bookmark.dart';
@@ -21,12 +22,19 @@ class SessionHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SessionBloc, SessionState>(
       builder: (context, state) {
-        final bookmarks = StorageService().getAllBookmarks();
+        final storage = StorageService();
+        final bookmarks = storage.getAllBookmarks();
+        final logEntries = storage.getAllLogEntries();
         final timeline = <({String type, dynamic item, DateTime time})>[
           ...state.history.map(
               (s) => (type: 'session', item: s as dynamic, time: s.createdAt)),
           ...bookmarks.map((b) =>
               (type: 'bookmark', item: b as dynamic, time: b.timestamp)),
+          ...logEntries.map((e) => (
+                type: 'logentry',
+                item: e as dynamic,
+                time: e.occurredAt,
+              )),
         ];
         timeline.sort((a, b) => b.time.compareTo(a.time));
 
@@ -51,7 +59,7 @@ class SessionHistoryScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
-                    '${state.history.length} sessions \u2022 ${bookmarks.length} bookmarks',
+                    '${state.history.length} sessions \u2022 ${bookmarks.length} bookmarks • ${logEntries.length} logs',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -111,6 +119,9 @@ class SessionHistoryScreen extends StatelessWidget {
         final entry = timeline[index];
         if (entry.type == 'bookmark') {
           return _BookmarkListCard(bookmark: entry.item as VitalsBookmark);
+        }
+        if (entry.type == 'logentry') {
+          return _LogEntryListCard(logEntry: entry.item as LogEntry);
         }
         final session = entry.item as Session;
         return Dismissible(
@@ -453,3 +464,156 @@ class _BookmarkListCard extends StatelessWidget {
   }
 }
 
+/// Timeline card for a [LogEntry] — raw user observation, possibly
+/// upgraded by the classifier worker (Part 2) into a typed entry
+/// ('dose', 'meal', 'symptom', etc.). Displays the rawText and the
+/// vitals snapshot taken at capture time.
+///
+/// Intentionally no swipe-to-delete in this session — that will come
+/// once the classifier and edit flows land and a consistent delete-
+/// plus-sync-delete story exists.
+class _LogEntryListCard extends StatelessWidget {
+  final LogEntry logEntry;
+  const _LogEntryListCard({required this.logEntry});
+
+  @override
+  Widget build(BuildContext context) {
+    final dt = logEntry.occurredAt;
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final period = dt.hour < 12 ? 'am' : 'pm';
+    final min = dt.minute.toString().padLeft(2, '0');
+    final timeStr = '${dt.month}/${dt.day}  $h:$min $period';
+
+    final rawText = logEntry.rawText.trim();
+    final hasText = rawText.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: BioVoltColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: BioVoltColors.amber.withAlpha(15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BioVoltColors.amber.withAlpha(60)),
+            ),
+            child: const Icon(Icons.edit_note_rounded,
+                size: 18, color: BioVoltColors.amber),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        hasText ? rawText : '(vitals snapshot)',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: hasText
+                              ? BioVoltColors.textPrimary
+                              : BioVoltColors.textSecondary,
+                          fontStyle:
+                              hasText ? FontStyle.normal : FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _typeChip(logEntry.type),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      if (logEntry.hrBpm != null)
+                        _miniChip(
+                            'HR', logEntry.hrBpm!.toStringAsFixed(0)),
+                      if (logEntry.hrvMs != null)
+                        _miniChip('HRV',
+                            '${logEntry.hrvMs!.toStringAsFixed(0)}ms'),
+                      if (logEntry.gsrUs != null)
+                        _miniChip('GSR',
+                            '${logEntry.gsrUs!.toStringAsFixed(1)}µS'),
+                      if (logEntry.skinTempF != null)
+                        _miniChip('T',
+                            '${logEntry.skinTempF!.toStringAsFixed(1)}°F'),
+                      if (logEntry.spo2Percent != null)
+                        _miniChip('SpO2',
+                            '${logEntry.spo2Percent!.toStringAsFixed(0)}%'),
+                      Text(
+                        timeStr,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          color: BioVoltColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _typeChip(String type) {
+    // 'other' is the unclassified default — render dimmer so once the
+    // classifier upgrades to 'dose'/'meal'/etc. the stronger labels pop.
+    final isOther = type == 'other';
+    final label = isOther ? 'log' : type;
+    final color = isOther ? BioVoltColors.textSecondary : BioVoltColors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _miniChip(String label, String value) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: BioVoltColors.background,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: BioVoltColors.cardBorder),
+      ),
+      child: Text(
+        '$label $value',
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 9,
+          color: BioVoltColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}

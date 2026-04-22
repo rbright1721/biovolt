@@ -996,12 +996,18 @@ class StorageService {
   /// dedicated edit path (Part 1 UI) will emit `timeline.entry_edited`.
   Future<void> saveLogEntry(LogEntry entry) async {
     await _logEntriesBox?.put(entry.id, entry);
+    // `rawText` is included so the timeline renderer can show what the
+    // user actually logged without a separate storage lookup per event.
+    // Other renderers in `lib/ui/timeline/renderers/` all read from
+    // payload only; matching that keeps tests that swap in an
+    // `eventLogOverride` working without needing a stubbed StorageService.
     await eventLog.append(
       type: EventTypes.entryCreated,
       payload: {
         'id': entry.id,
         'occurredAt': entry.occurredAt.toIso8601String(),
         'loggedAt': entry.loggedAt.toIso8601String(),
+        'rawText': entry.rawText,
         'type': entry.type,
         'classificationStatus': entry.classificationStatus,
       },
@@ -1033,14 +1039,24 @@ class StorageService {
   /// the user can reclassify manually from the timeline UI.
   static const _maxClassificationAttempts = 3;
 
-  /// Entries the classifier still needs to handle: fresh 'pending' plus
-  /// 'failed' entries that haven't exhausted their retry budget.
-  /// Returned oldest-first (by [LogEntry.loggedAt]) for FIFO processing.
+  /// Entries the classifier still needs to handle. Status mix included:
+  ///   * 'pending'  — fresh entries, always eligible
+  ///   * 'skipped'  — couldn't run before (e.g., user was signed out);
+  ///                  eligible again regardless of attempts because the
+  ///                  blocker was environmental, not the entry itself
+  ///   * 'failed'   — only if [classificationAttempts] <
+  ///                  [_maxClassificationAttempts]; permanently_failed
+  ///                  is excluded
+  ///
+  /// Returned oldest-first (by [LogEntry.loggedAt]) so FIFO semantics
+  /// match the on-device worker's expected processing order. 'classified',
+  /// 'permanently_failed', and 'user_corrected' never come back through.
   List<LogEntry> getPendingClassification() {
     if (_logEntriesBox == null) return [];
     return _logEntriesBox!.values
         .where((e) =>
             e.classificationStatus == 'pending' ||
+            e.classificationStatus == 'skipped' ||
             (e.classificationStatus == 'failed' &&
                 e.classificationAttempts < _maxClassificationAttempts))
         .toList()
@@ -1102,6 +1118,40 @@ class StorageService {
         'type': type,
         'confidence': confidence,
         'status': status,
+        'attempts': updated.classificationAttempts,
+        'error': ?error,
+      },
+    );
+  }
+
+  /// Mark a log entry as 'skipped' without counting the tick against
+  /// [LogEntry.classificationAttempts]. Used by the worker when the
+  /// classifier can't even run — e.g. the user is signed out. The
+  /// entry re-enters the pending queue on the next launch or the next
+  /// watch event, and will still have a full retry budget once the
+  /// blocker clears.
+  ///
+  /// Emits `timeline.entry_classified` with `status: 'skipped'` so the
+  /// timeline picks it up. We reuse the classified type rather than
+  /// mint a dedicated `entry_skipped` event because a skip is a classifier
+  /// lifecycle transition, not a new user action.
+  Future<void> markLogEntrySkipped(String id, {String? error}) async {
+    final existing = _logEntriesBox?.get(id);
+    if (existing == null) return;
+
+    final updated = existing.copyWith(
+      classificationStatus: 'skipped',
+      classificationError: error,
+      // Deliberately NOT incrementing classificationAttempts — skipped
+      // is an environmental block, not a genuine attempt.
+    );
+    await _logEntriesBox?.put(id, updated);
+    await eventLog.append(
+      type: EventTypes.entryClassified,
+      payload: {
+        'id': id,
+        'type': existing.type,
+        'status': 'skipped',
         'attempts': updated.classificationAttempts,
         'error': ?error,
       },
