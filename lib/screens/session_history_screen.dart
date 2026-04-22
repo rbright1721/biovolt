@@ -1,8 +1,9 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show StreamSubscription, unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive/hive.dart';
 import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
@@ -15,8 +16,35 @@ import '../services/firestore_sync.dart';
 import '../services/storage_service.dart';
 import 'analysis_screen.dart';
 
-class SessionHistoryScreen extends StatelessWidget {
+class SessionHistoryScreen extends StatefulWidget {
   const SessionHistoryScreen({super.key});
+
+  @override
+  State<SessionHistoryScreen> createState() => _SessionHistoryScreenState();
+}
+
+class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
+  // Subscribe to log-entry box events so classifier updates (the worker
+  // writes the classified verdict out-of-band) trigger a rebuild while
+  // the user is sitting on this screen. Without this, the type chip
+  // would only upgrade from 'LOG' to the classified type after a tab
+  // switch or an unrelated SessionBloc state change — the audit flagged
+  // this as W2.
+  StreamSubscription<BoxEvent>? _logEntrySub;
+
+  @override
+  void initState() {
+    super.initState();
+    _logEntrySub = StorageService().watchLogEntries().listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _logEntrySub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

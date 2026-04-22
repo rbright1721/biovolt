@@ -277,6 +277,55 @@ void main() {
       expect(classifier.lastContext?.activeProtocols.single.name, 'GlyNAC');
     });
 
+    test('classifier structured.protocol_id is lifted onto '
+        'LogEntry.protocolIdAtTime', () async {
+      await seed(id: 'e-pid', loggedAt: DateTime.utc(2026, 4, 20));
+      final classifier = _FakeClassifier([
+        _Response.ok(ClassificationResult(
+          logEntryId: 'e-pid',
+          type: 'dose',
+          structured: {
+            'protocol_name': 'BPC-157',
+            'protocol_id': 'p-42',
+            'dose_amount': '250mcg',
+          },
+          confidence: 0.9,
+          modelVersion: 'claude-sonnet-4-5-prompt-v1',
+          classifiedAt: DateTime.utc(2026, 4, 20, 12),
+        )),
+      ]);
+      final worker = buildWorker(classifier: classifier);
+
+      await worker.processPending();
+
+      final updated = storage.getLogEntry('e-pid')!;
+      expect(updated.protocolIdAtTime, 'p-42',
+          reason: 'worker must lift structured.protocol_id onto the '
+              'indexed protocolIdAtTime field');
+    });
+
+    test('classifier result without protocol_id leaves protocolIdAtTime '
+        'null for a fresh entry', () async {
+      await seed(id: 'e-meal', loggedAt: DateTime.utc(2026, 4, 20));
+      final classifier = _FakeClassifier([
+        _Response.ok(ClassificationResult(
+          logEntryId: 'e-meal',
+          type: 'meal',
+          structured: {'items': ['eggs'], 'meal_kind': 'breakfast'},
+          confidence: 0.88,
+          modelVersion: 'claude-sonnet-4-5-prompt-v1',
+          classifiedAt: DateTime.utc(2026, 4, 20, 12),
+        )),
+      ]);
+      final worker = buildWorker(classifier: classifier);
+
+      await worker.processPending();
+
+      final updated = storage.getLogEntry('e-meal')!;
+      expect(updated.protocolIdAtTime, isNull,
+          reason: 'meal entries have no protocol link, field stays null');
+    });
+
     test('classifier modelVersion is persisted onto the entry', () async {
       await seed(id: 'e-mv', loggedAt: DateTime.utc(2026, 4, 20));
       final classifier = _FakeClassifier([

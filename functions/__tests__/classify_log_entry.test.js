@@ -12,6 +12,7 @@ const {
   CLASSIFIER_PROMPT_VERSION,
   CLASSIFIER_VOCAB,
   ClassifierParseError,
+  callTracker,
 } = require("../classify_log_entry");
 
 // -----------------------------------------------------------------------------
@@ -683,6 +684,63 @@ describe("applyConfidenceThresholds", () => {
     expect(r.type).toBe("other");
     expect(r.structured).toBeNull();
   });
+});
+
+describe("per-uid call tracker", () => {
+  beforeEach(() => {
+    callTracker.clear();
+  });
+
+  test("records each classify call under the uid", async () => {
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+
+    for (let i = 0; i < 5; i++) {
+      await classifyLogEntryHandler(makeRequest({
+        auth: { uid: "user-tracker" },
+        data: { logEntryId: `entry-${i}` },
+      }));
+    }
+
+    expect(callTracker.get("user-tracker")).toHaveLength(5);
+  });
+
+  test("tracks different uids independently", async () => {
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+    mockClaude({ type: "note", confidence: 0.8, structured: null });
+
+    await classifyLogEntryHandler(makeRequest({
+      auth: { uid: "alice" }, data: { logEntryId: "a-1" },
+    }));
+    await classifyLogEntryHandler(makeRequest({
+      auth: { uid: "bob" }, data: { logEntryId: "b-1" },
+    }));
+    await classifyLogEntryHandler(makeRequest({
+      auth: { uid: "alice" }, data: { logEntryId: "a-2" },
+    }));
+
+    expect(callTracker.get("alice")).toHaveLength(2);
+    expect(callTracker.get("bob")).toHaveLength(1);
+  });
+
+  test("does not throw on any call volume (observability only, no cap)",
+      async () => {
+        for (let i = 0; i < 5; i++) {
+          mockClaude({ type: "note", confidence: 0.8, structured: null });
+        }
+        for (let i = 0; i < 5; i++) {
+          // Should not throw even once — the warn log fires above the
+          // threshold but nothing blocks the call.
+          await expect(classifyLogEntryHandler(makeRequest({
+            auth: { uid: "unblocked" },
+            data: { logEntryId: `u-${i}` },
+          }))).resolves.toBeDefined();
+        }
+      });
 });
 
 describe("buildUserMessage", () => {

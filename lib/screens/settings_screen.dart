@@ -100,6 +100,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                   _buildAccountSection(),
                   const SizedBox(height: 24),
+                  _buildDeveloperSection(),
+                  const SizedBox(height: 24),
                   _buildAboutSection(),
                   const SizedBox(height: 40),
                 ],
@@ -646,6 +648,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Developer (temporary — Session 2 timeline preview entry)
+  // ---------------------------------------------------------------------------
+  //
+  // Removed in Session 3 once the TimelineScreen replaces the LIVE tab.
+  // Until then this gives a hand-rolled entry point to verify the screen
+  // visually without making it the default route.
+
+  Widget _buildDeveloperSection() {
+    return _Section(
+      title: 'DEVELOPER',
+      children: [
+        GestureDetector(
+          onTap: () =>
+              Navigator.of(context).pushNamed('/timeline-preview'),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: BioVoltColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: BioVoltColors.cardBorder),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.timeline_rounded,
+                    size: 18, color: BioVoltColors.amber),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'OPEN TIMELINE PREVIEW',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: BioVoltColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Session 2 dev route — static rendering only',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: BioVoltColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: BioVoltColors.textSecondary.withAlpha(80),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // About

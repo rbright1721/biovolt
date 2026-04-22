@@ -66,7 +66,11 @@
       "Bash(npx jest *)",
       "Bash(firebase use *)",
       "Bash(firebase functions:secrets:access ANTHROPIC_API_KEY --project biovolt)",
-      "Bash(firebase functions:secrets:access ANTHROPIC_API_KEY)"
+      "Bash(firebase functions:secrets:access ANTHROPIC_API_KEY)",
+      "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt status)",
+      "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt log --oneline -30)",
+      "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt diff --stat HEAD~10..HEAD)",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }

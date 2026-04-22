@@ -54,7 +54,47 @@
 // =============================================================================
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const logger = require("firebase-functions/logger");
 const fetch = require("node-fetch");
+
+// -----------------------------------------------------------------------------
+// Cold-start self-check — runs once per Cloud Function instance.
+//
+// If ANTHROPIC_API_KEY is missing at cold start, the function will fail
+// every call until the secret is configured. This loud Cloud Logging
+// error makes that state visible in the dashboard without waiting for
+// a user to hit the per-call guard in the handler.
+// -----------------------------------------------------------------------------
+(function assertAnthropicKeyConfigured() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    logger.error(
+      "ANTHROPIC_API_KEY missing at cold start. " +
+      "classifyLogEntry will fail for every call until " +
+      "the secret is configured.",
+    );
+  }
+})();
+
+// -----------------------------------------------------------------------------
+// Per-instance call tracker — observability only, no blocking.
+//
+// Tracks trailing-24h call timestamps per uid in-memory. Each Cloud
+// Function instance has its own view, so multiple instances +
+// cold-start churn mean this underestimates the true per-user rate.
+// Good enough for "spot a weirdly chatty uid" alerts; not a cap.
+// -----------------------------------------------------------------------------
+const callTracker = new Map(); // uid → [timestampMs, ...]
+const TRACK_WINDOW_MS = 24 * 60 * 60 * 1000;
+const HIGH_VOLUME_THRESHOLD = 100;
+
+function recordCall(uid) {
+  const now = Date.now();
+  const arr = callTracker.get(uid) || [];
+  const trimmed = arr.filter((t) => now - t < TRACK_WINDOW_MS);
+  trimmed.push(now);
+  callTracker.set(uid, trimmed);
+  return trimmed.length;
+}
 
 // -----------------------------------------------------------------------------
 // Constants.
@@ -185,9 +225,26 @@ async function classifyLogEntryHandler(request) {
   const data = request.data || {};
   validateRequest(data);
 
-  // Observability: log shape, not content. Raw text only reappears on
-  // error paths below. See Cloud Logging for the emitted structured
-  // fields.
+  // Per-UID rolling 24h call counter for observability. Never throws,
+  // never blocks — emits a structured info log on every call, and a
+  // warn log when a uid crosses the "this is weird" threshold.
+  const callCount24h = recordCall(request.auth.uid);
+  if (callCount24h > HIGH_VOLUME_THRESHOLD) {
+    logger.warn("High classifier call volume", {
+      uid: request.auth.uid,
+      count24h: callCount24h,
+      logEntryId: data.logEntryId,
+    });
+  }
+  logger.info("Classify call", {
+    uid: request.auth.uid,
+    count24h: callCount24h,
+    logEntryId: data.logEntryId,
+    rawTextLength: typeof data.rawText === "string" ? data.rawText.length : 0,
+  });
+
+  // Retained for backward-compatible log parsing — the structured
+  // logger lines above are the canonical source.
   console.log(
     "classifyLogEntry called by uid:",
     request.auth.uid,
@@ -685,4 +742,9 @@ module.exports = {
   // Error types surfaced for test assertions.
   ClassifierParseError,
   ClassifierAnthropicError,
+  // Call-tracker internals — exposed for test-side inspection. The
+  // map is shared module state, so tests must clear it between
+  // cases (see __tests__/classify_log_entry.test.js).
+  callTracker,
+  HIGH_VOLUME_THRESHOLD,
 };

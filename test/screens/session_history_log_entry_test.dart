@@ -149,4 +149,49 @@ void main() {
     expect(find.text('mid-morning bookmark'), findsOneWidget);
     expect(find.text('pre-lunch bookmark'), findsOneWidget);
   });
+
+  // Step 4 (Part 3.1): the screen subscribes to watchLogEntries() and
+  // rebuilds when a new log entry lands, so classifier updates surface
+  // without a navigation round-trip. The assertion here is the simpler
+  // "new entry appears" case; the classifier-update case exercises the
+  // same code path (Hive put → BoxEvent → setState).
+  testWidgets('rebuilds when a new log entry is written to storage',
+      (tester) async {
+    final bloc = _StubSessionBloc(const SessionState());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: BlocProvider<SessionBloc>.value(
+          value: bloc,
+          child: const SessionHistoryScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Screen starts empty.
+    expect(find.text('newly logged text'), findsNothing);
+
+    // Write a new entry via storage — this fires a BoxEvent through
+    // watchLogEntries(), which the screen listens to and converts into
+    // setState.
+    await tester.runAsync(() async {
+      await storage.saveLogEntry(LogEntry(
+        id: 'reactive-1',
+        rawText: 'newly logged text',
+        occurredAt: DateTime(2026, 4, 20, 15),
+        loggedAt: DateTime(2026, 4, 20, 15),
+      ));
+      // Let the BoxEvent propagate on the real event loop before we
+      // hand control back to the FakeAsync zone.
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    });
+    // Two pumps: one to let setState queue, a second to let the
+    // ListView item paint.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.text('newly logged text'), findsOneWidget);
+  });
 }

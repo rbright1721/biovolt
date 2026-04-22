@@ -125,10 +125,10 @@ class LogEntry {
 
   /// Version tag of the classifier that produced the current
   /// classification. Null until classified. Examples:
-  ///   'stub-v0'                — Part 2 stub
-  ///   'claude-sonnet-4-5-v1'   — Part 2.5 real classifier, prompt v1
-  ///   'user_corrected'         — user manually set classification
-  ///                              (future feature)
+  ///   'stub-v0'                        — Part 2 stub
+  ///   'claude-sonnet-4-5-prompt-v1'    — Part 2.5 real classifier, prompt v1
+  ///   'user_corrected'                 — user manually set classification
+  ///                                      (future feature)
   ///
   /// Required for rollback, A/B analysis, and data provenance:
   /// knowing which classifier produced a verdict lets us invalidate

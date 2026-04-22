@@ -353,6 +353,65 @@ void main() {
               'update that omits the argument');
     });
 
+    // -- protocolIdAtTime propagation (Part 3.1) -------------------------
+
+    test('updateLogEntryClassification with protocolIdAtTime sets the field '
+        'and includes it in the event payload', () async {
+      await storage.saveLogEntry(make('pid-1',
+          classificationStatus: 'pending'));
+
+      await storage.updateLogEntryClassification(
+        'pid-1',
+        type: 'dose',
+        structured: {'protocol_id': 'p-abc', 'compound': 'BPC-157'},
+        confidence: 0.9,
+        status: 'classified',
+        protocolIdAtTime: 'p-abc',
+      );
+
+      final updated = storage.getLogEntry('pid-1')!;
+      expect(updated.protocolIdAtTime, 'p-abc');
+
+      final events = await storage.eventLog
+          .query(type: EventTypes.entryClassified);
+      expect(events.last.payload['protocolIdAtTime'], 'p-abc');
+    });
+
+    test('updateLogEntryClassification without protocolIdAtTime preserves '
+        'the existing value — a non-dose reclassification must not '
+        'clobber a good link', () async {
+      // First classify as dose with a protocol id.
+      await storage.saveLogEntry(make('pid-2',
+          classificationStatus: 'pending'));
+      await storage.updateLogEntryClassification(
+        'pid-2',
+        type: 'dose',
+        structured: {'protocol_id': 'p-xyz'},
+        confidence: 0.9,
+        status: 'classified',
+        protocolIdAtTime: 'p-xyz',
+      );
+      expect(storage.getLogEntry('pid-2')!.protocolIdAtTime, 'p-xyz');
+
+      // Simulate a later retry / reclassification that doesn't carry
+      // a protocolIdAtTime (e.g. a 'meal' or 'symptom' verdict whose
+      // structured omits protocol_id). The prior link must stick.
+      await storage.updateLogEntryClassification(
+        'pid-2',
+        type: 'symptom',
+        structured: {'symptom': 'headache'},
+        confidence: 0.82,
+        status: 'classified',
+        // protocolIdAtTime omitted.
+      );
+
+      final after = storage.getLogEntry('pid-2')!;
+      expect(after.type, 'symptom');
+      expect(after.protocolIdAtTime, 'p-xyz',
+          reason: 'prior protocolIdAtTime must not be cleared by an '
+              'update that omits the argument');
+    });
+
     test(
         'updateLogEntryClassification with status=failed preserves error and bumps attempts',
         () async {

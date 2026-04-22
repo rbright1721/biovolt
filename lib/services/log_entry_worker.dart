@@ -230,6 +230,15 @@ class LogEntryWorker {
           confidence: result.confidence,
           status: 'classified',
           modelVersion: result.modelVersion,
+          // Lift classifier-extracted protocol_id onto the top-level
+          // indexed field so downstream queries ("all logs for this
+          // protocol") can filter without JSON-scanning structured.
+          // The classifier only populates protocol_id for type='dose'
+          // today; _extractProtocolId returns null for every other
+          // type, which flows through updateLogEntryClassification's
+          // preserve-on-null rule so a later reclassification can't
+          // accidentally wipe a good link.
+          protocolIdAtTime: _extractProtocolId(result.structured),
         ));
     if (_disposed) return;
 
@@ -265,6 +274,17 @@ class LogEntryWorker {
     // request was malformed or dropped; writing a "failed" record on
     // top of the existing doc would just overwrite good prior state
     // with a transient error. Next success will re-sync.
+  }
+
+  /// Pulls a non-empty string `protocol_id` out of the classifier's
+  /// `structured` map, if present. Returns null for missing,
+  /// non-string, or empty values so the caller can treat "no link"
+  /// uniformly.
+  static String? _extractProtocolId(Map<String, dynamic>? structured) {
+    if (structured == null) return null;
+    final raw = structured['protocol_id'];
+    if (raw is String && raw.isNotEmpty) return raw;
+    return null;
   }
 
   ClassificationContext _buildContext() {

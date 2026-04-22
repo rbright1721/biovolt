@@ -1094,6 +1094,7 @@ class StorageService {
     required String status,
     String? error,
     String? modelVersion,
+    String? protocolIdAtTime,
   }) async {
     final existing = _logEntriesBox?.get(id);
     if (existing == null) return;
@@ -1113,6 +1114,12 @@ class StorageService {
       // here must NOT clobber a previously-recorded version.
       classificationModelVersion:
           modelVersion ?? existing.classificationModelVersion,
+      // Same preservation pattern for protocolIdAtTime: a
+      // reclassification that doesn't surface a protocol_id (e.g.
+      // user recorrection into 'meal') must not clobber a good link
+      // that the original classifier produced.
+      protocolIdAtTime:
+          protocolIdAtTime ?? existing.protocolIdAtTime,
     );
     await _logEntriesBox?.put(id, updated);
     await eventLog.append(
@@ -1127,6 +1134,11 @@ class StorageService {
         'attempts': updated.classificationAttempts,
         'error': ?error,
         'modelVersion': ?updated.classificationModelVersion,
+        // rawText included so the timeline renderer can show what the
+        // user logged without a secondary storage lookup, matching the
+        // timeline.entry_created payload shape.
+        'rawText': existing.rawText,
+        'protocolIdAtTime': ?updated.protocolIdAtTime,
       },
     );
   }

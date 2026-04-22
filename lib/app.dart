@@ -19,6 +19,7 @@ import 'screens/session_history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/sign_in_screen.dart';
+import 'screens/timeline_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
 import 'services/log_entry_worker.dart';
@@ -123,6 +124,14 @@ class _BioVoltAppState extends State<BioVoltApp>
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
         navigatorKey: appNavigatorKey,
+        // Session 2 dev route — TimelineScreen behind a named route so
+        // it can be reached from the Settings dev entry without making
+        // it the default LIVE tab. Removed in Session 3 once the
+        // TimelineScreen replaces the LIVE tab content.
+        routes: {
+          '/timeline-preview': (_) =>
+              TimelineScreen(bleService: widget.bleService),
+        },
         home: _buildHome(),
       ),
     );

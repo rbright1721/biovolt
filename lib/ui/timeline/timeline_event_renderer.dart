@@ -18,7 +18,9 @@ import 'renderers/session_discarded_renderer.dart';
 import 'renderers/session_ended_renderer.dart';
 import 'renderers/session_started_renderer.dart';
 import 'renderers/supplement_added_renderer.dart';
+import 'renderers/timeline_entry_classified_renderer.dart';
 import 'renderers/timeline_entry_created_renderer.dart';
+import 'renderers/timeline_entry_reclassified_renderer.dart';
 
 /// Pluggable renderer for a single event type on the timeline screen.
 ///
@@ -87,6 +89,8 @@ class TimelineRendererRegistry {
     JournalEntryAddedRenderer(),
     JournalEntryEditedRenderer(),
     TimelineEntryCreatedRenderer(),
+    TimelineEntryClassifiedRenderer(),
+    TimelineEntryReclassifiedRenderer(),
   ]);
 }
 
