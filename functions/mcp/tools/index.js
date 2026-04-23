@@ -6,6 +6,8 @@ const tools = [
   require("./get_bloodwork"),
   require("./get_journal_context"),
   require("./log_journal_entry"),
+  require("./get_log_entries"),
+  require("./get_protocol_timeline"),
 ];
 
 const byName = new Map(tools.map((t) => [t.name, t]));

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive/hive.dart';
 
 import '../config/theme.dart';
 import '../services/ble_service.dart';
@@ -41,6 +44,15 @@ class _TimelineScreenState extends State<TimelineScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _nowMarkerKey = GlobalKey();
 
+  /// Coalesce rapid Hive writes (e.g. classifier verdict lands in the
+  /// same frame as user save) into a single rebuild. 250ms is short
+  /// enough that new log entries appear ~instantly and long enough
+  /// that a capture + its classifier verdict merge into one render.
+  static const Duration _rebuildDebounce = Duration(milliseconds: 250);
+
+  StreamSubscription<BoxEvent>? _logEntrySub;
+  Timer? _debounceTimer;
+
   late List<TimelineItem> _items;
   late List<_GroupedEntry> _grouped;
 
@@ -48,9 +60,22 @@ class _TimelineScreenState extends State<TimelineScreen> {
   void initState() {
     super.initState();
     _rebuild();
+    if (widget.initialItems == null) {
+      _logEntrySub = StorageService().watchLogEntries().listen((_) {
+        _scheduleRebuild();
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _scrollToNow();
+    });
+  }
+
+  void _scheduleRebuild() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_rebuildDebounce, () {
+      if (!mounted) return;
+      setState(_rebuild);
     });
   }
 
@@ -81,6 +106,8 @@ class _TimelineScreenState extends State<TimelineScreen> {
 
   @override
   void dispose() {
+    _logEntrySub?.cancel();
+    _debounceTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }

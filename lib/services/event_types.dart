@@ -105,15 +105,12 @@ class EventTypes {
   // User observations captured as free-text or voice notes, then
   // upgraded by the classifier worker into typed entries. See [LogEntry].
   // Storage-layer emit sites: saveLogEntry → entryCreated,
-  // updateLogEntryClassification → entryClassified or entryReclassified,
-  // deleteLogEntry → entryDeleted. [entryEdited] is reserved for
-  // user-driven edits of rawText/occurredAt/userNotes/tags; it will be
-  // wired from the edit flow in a later part and has no storage emit
-  // site yet — same pattern as the other type constants in this file
-  // without current callers (e.g., protocolVersionCommitted).
+  // updateLogEntryClassification → entryClassified or entryReclassified.
+  // [entryDeleted] is kept for the upcoming delete-entry UI flow;
+  // [entryEdited] was removed in the 2026-04-22 cleanup — re-add it
+  // when an edit flow lands.
   static const entryCreated = 'timeline.entry_created';
   static const entryClassified = 'timeline.entry_classified';
   static const entryReclassified = 'timeline.entry_reclassified';
-  static const entryEdited = 'timeline.entry_edited';
   static const entryDeleted = 'timeline.entry_deleted';
 }

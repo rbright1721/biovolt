@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'event_log.dart';
 import 'event_types.dart';
+import 'firestore_sync.dart';
 import 'widget_service.dart';
 
 import '../models/ai_analysis.dart';
@@ -847,6 +848,12 @@ class StorageService {
         'endDate': updated.endDate!.toIso8601String(),
       },
     );
+    // Post-audit Fix #3: previously the retired protocol stayed in
+    // Firestore as "active" (or got hard-deleted by the END button's
+    // separate deleteProtocol call). Pushing the retired record itself
+    // means consumers (MCP, future dashboards) see the actual end
+    // state with isActive=false and endDate set.
+    unawaited(FirestoreSync().writeProtocol(updated));
   }
 
   Future<void> deleteActiveProtocol(String id) async {
@@ -1177,19 +1184,11 @@ class StorageService {
     );
   }
 
-  Future<void> deleteLogEntry(String id) async {
-    final prior = _logEntriesBox?.get(id);
-    await _logEntriesBox?.delete(id);
-    await eventLog.append(
-      type: EventTypes.entryDeleted,
-      payload: {
-        'id': id,
-        if (prior != null)
-          'occurredAt': prior.occurredAt.toIso8601String(),
-        if (prior != null) 'type': prior.type,
-      },
-    );
-  }
+  // Removed in 2026-04-22 cleanup: deleteLogEntry had no UI caller —
+  // there is currently no delete-entry flow in the timeline. The
+  // EventTypes.entryDeleted constant + its emit-site come back the
+  // moment a delete UI lands. The companion FirestoreSync.deleteLogEntry
+  // is removed alongside.
 
   /// Hive box event stream for reactive UIs (Part 4 timeline view).
   Stream<BoxEvent> watchLogEntries() {

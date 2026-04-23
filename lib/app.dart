@@ -12,7 +12,6 @@ import 'bloc/session/session_state.dart';
 import 'config/theme.dart';
 import 'screens/analysis_screen.dart';
 import 'main.dart' show appNavigatorKey;
-import 'screens/dashboard_screen.dart';
 import 'screens/data_hub_screen.dart';
 import 'screens/journal_screen.dart';
 import 'screens/session_history_screen.dart';
@@ -22,6 +21,7 @@ import 'screens/sign_in_screen.dart';
 import 'screens/timeline_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
+import 'services/firestore_sync.dart';
 import 'services/log_entry_worker.dart';
 import 'services/session_recorder.dart';
 import 'services/session_storage.dart';
@@ -82,6 +82,18 @@ class _BioVoltAppState extends State<BioVoltApp>
         _authChecked = true;
       });
     }
+    // Cold-start backfill: sign-in path in AuthService already calls
+    // syncAll on every fresh sign-in, but a user who was already
+    // signed in from a prior session never hits that path. Without
+    // this call, any local Hive state created before the matching
+    // FirestoreSync.writeX call landed (e.g., protocols saved in
+    // 2026-04-15→18 before profile_screen.dart:1008's writeProtocol
+    // was added on 2026-04-18) stays stranded on-device. syncAll
+    // uses merge:true everywhere, so re-running on already-synced
+    // docs is a safe no-op.
+    if (FirebaseAuth.instance.currentUser != null) {
+      unawaited(FirestoreSync().syncAll(StorageService()));
+    }
   }
 
   @override
@@ -124,14 +136,6 @@ class _BioVoltAppState extends State<BioVoltApp>
         debugShowCheckedModeBanner: false,
         theme: BioVoltTheme.dark,
         navigatorKey: appNavigatorKey,
-        // Session 2 dev route — TimelineScreen behind a named route so
-        // it can be reached from the Settings dev entry without making
-        // it the default LIVE tab. Removed in Session 3 once the
-        // TimelineScreen replaces the LIVE tab content.
-        routes: {
-          '/timeline-preview': (_) =>
-              TimelineScreen(bleService: widget.bleService),
-        },
         home: _buildHome(),
       ),
     );
@@ -183,7 +187,7 @@ class _MainShellState extends State<_MainShell> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      DashboardScreen(bleService: widget.bleService),
+      TimelineScreen(bleService: widget.bleService),
       const SessionHistoryScreen(),
       JournalScreen(bleService: widget.bleService),
       TrendsScreen(trendAnalyst: widget.trendAnalyst),

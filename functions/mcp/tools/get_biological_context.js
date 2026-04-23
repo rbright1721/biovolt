@@ -1,7 +1,10 @@
+const {shapeProtocolForMcp} = require("./_protocol_shape");
+
 const NAME = "get_biological_context";
 
 async function handler({ input, ctx }) {
   const { userRef, now } = ctx;
+  const referenceNow = typeof now === "number" ? new Date(now) : new Date();
 
   const [profileDoc, protocolsSnap, sessionsSnap] = await Promise.all([
     userRef.collection("meta").doc("profile").get(),
@@ -12,7 +15,11 @@ async function handler({ input, ctx }) {
   ]);
 
   const profile = profileDoc.data() || {};
-  const protocols = protocolsSnap.docs.map((d) => d.data());
+  // Shape protocols server-side so currentCycleDay/isOngoing reflect
+  // today's reality rather than a stale write-time snapshot.
+  const protocols = protocolsSnap.docs.map(
+    (d) => shapeProtocolForMcp(d, referenceNow),
+  );
   const sessions = sessionsSnap.docs.map((d) => d.data());
 
   let fastingHours = null;

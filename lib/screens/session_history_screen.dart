@@ -142,7 +142,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: timeline.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final entry = timeline[index];
         if (entry.type == 'bookmark') {

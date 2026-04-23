@@ -676,7 +676,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
               isStrokeCapRound: true,
               dotData: FlDotData(
                 show: series.length < 20,
-                getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                getDotPainter: (_, _, _, _) => FlDotCirclePainter(
                   radius: 2,
                   color: color,
                   strokeWidth: 0,
@@ -919,7 +919,7 @@ class _ChartCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trendBadge != null) trendBadge!,
+              ?trendBadge,
             ],
           ),
           const SizedBox(height: 12),

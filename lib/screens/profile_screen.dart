@@ -811,8 +811,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (protocol.isActive)
             GestureDetector(
               onTap: () async {
+                // End the protocol locally and push the retired state
+                // to Firestore (StorageService.endProtocol fires
+                // FirestoreSync.writeProtocol on the retired record).
+                // The previous unawaited deleteProtocol call here was
+                // racing with that write — and winning, hard-deleting
+                // the doc and breaking historical MCP queries
+                // (get_protocol_timeline against a retired protocol).
+                // Retired protocols now stay queryable with
+                // isActive=false; get_active_protocols filters them
+                // out of the default response.
                 await _storage.endProtocol(protocol.id);
-                unawaited(FirestoreSync().deleteProtocol(protocol.id));
                 _reloadProtocols();
               },
               child: Container(

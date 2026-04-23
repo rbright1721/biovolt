@@ -1,4 +1,4 @@
-const { SERVER_INFO, TOOLS } = require("../tools");
+const {SERVER_INFO, TOOLS} = require("../tools");
 const registry = require("../../tools");
 
 describe("MCP tool schema", () => {
@@ -29,7 +29,7 @@ describe("MCP tool schema", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test("includes the seven expected tools", () => {
+  test("includes the nine expected tools", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual([
       "get_active_protocols",
@@ -37,9 +37,16 @@ describe("MCP tool schema", () => {
       "get_bloodwork",
       "get_fasting_state",
       "get_journal_context",
+      "get_log_entries",
+      "get_protocol_timeline",
       "get_session_history",
       "log_journal_entry",
     ]);
+  });
+
+  test("get_protocol_timeline declares protocolId as required", () => {
+    const tool = TOOLS.find((t) => t.name === "get_protocol_timeline");
+    expect(tool.inputSchema.required).toContain("protocolId");
   });
 
   test("log_journal_entry declares message as required", () => {

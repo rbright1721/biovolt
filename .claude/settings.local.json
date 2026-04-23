@@ -70,7 +70,14 @@
       "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt status)",
       "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt log --oneline -30)",
       "Bash(git -C /c/Users/jbrig/StudioProjects/biovolt diff --stat HEAD~10..HEAD)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(flutter test *)",
+      "Read(//tmp/**)",
+      "Bash(pkill -f \"flutter test\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(grep -n \"^  group\\\\|^  }\\);$\" test/services/log_entry_worker_test.dart)",
+      "Bash(grep -qE \"issues found|No issues found|error\" \"C:\\\\\\\\Users\\\\\\\\jbrig\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\C--Users-jbrig-StudioProjects-biovolt\\\\\\\\628a53b1-12ba-4fa9-84fe-268f08759a3e\\\\\\\\tasks\\\\\\\\bn6764zrk.output\")"
     ]
   }
 }

@@ -250,6 +250,24 @@ class LogEntryWorker {
     final updated = _storage.getLogEntry(id);
     if (updated != null) {
       unawaited(_sync.writeLogEntry(updated));
+
+      // Post-audit Fix #2: when the classifier upgrades a Quick Log
+      // to type='meal', mirror that into profile.lastMealTime so
+      // fasting state (used by both the home widget and MCP tools)
+      // reflects the most recent meal. Monotonic-max rule — never
+      // rewind the fasting clock with a backdated meal entry. Uses
+      // entry.occurredAt (not DateTime.now()) so a meal logged with
+      // a manual past timestamp lands at the right point.
+      if (result.type == 'meal') {
+        final profile = _storage.getUserProfile();
+        final current = profile?.lastMealTime;
+        final entryTime = updated.occurredAt;
+        if (current == null || entryTime.isAfter(current)) {
+          await _safeUpdate(
+              () => _storage.updateLastMealTimeExplicit(entryTime));
+          unawaited(_sync.syncProfile(_storage));
+        }
+      }
     }
   }
 

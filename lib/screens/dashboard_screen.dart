@@ -1,3 +1,8 @@
+// LEGACY — replaced by TimelineScreen in Session 3 (2026-04-22).
+// No longer reachable through normal navigation. Preserved for
+// reference during transition. Candidate for deletion after the
+// timeline has run in production for 2+ weeks.
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';

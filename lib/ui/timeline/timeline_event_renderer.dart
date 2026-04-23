@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../models/biovolt_event.dart';
 import 'renderers/analysis_completed_renderer.dart';
-import 'renderers/device_connected_renderer.dart';
-import 'renderers/device_disconnected_renderer.dart';
 import 'renderers/device_state_changed_renderer.dart';
 import 'renderers/journal_entry_added_renderer.dart';
 import 'renderers/journal_entry_edited_renderer.dart';
@@ -16,8 +14,6 @@ import 'renderers/protocol_item_modified_renderer.dart';
 import 'renderers/protocol_item_removed_renderer.dart';
 import 'renderers/session_discarded_renderer.dart';
 import 'renderers/session_ended_renderer.dart';
-import 'renderers/session_started_renderer.dart';
-import 'renderers/supplement_added_renderer.dart';
 import 'renderers/timeline_entry_classified_renderer.dart';
 import 'renderers/timeline_entry_created_renderer.dart';
 import 'renderers/timeline_entry_reclassified_renderer.dart';
@@ -70,11 +66,17 @@ class TimelineRendererRegistry {
   /// The default registry wired with all first-class renderers shipped
   /// with the app. Test code that wants isolation can construct its own
   /// registry from a smaller list.
+  // Removed in 2026-04-22 cleanup:
+  //   SessionStartedRenderer, SupplementAddedRenderer,
+  //   DeviceConnectedRenderer, DeviceDisconnectedRenderer
+  // — their event types (sessionStarted, supplementAdded,
+  // deviceConnected, deviceDisconnected) are defined in EventTypes
+  // but never emitted by production code. The GenericTimelineRenderer
+  // fallback handles them if a future feature starts emitting.
   static final TimelineRendererRegistry defaultRegistry =
       TimelineRendererRegistry(const [
     SessionEndedRenderer(),
     SessionDiscardedRenderer(),
-    SessionStartedRenderer(),
     ProfileBloodworkAddedRenderer(),
     ProfileBloodworkEditedRenderer(),
     ProfileBloodworkRemovedRenderer(),
@@ -82,10 +84,7 @@ class TimelineRendererRegistry {
     ProtocolItemModifiedRenderer(),
     ProtocolItemRemovedRenderer(),
     DeviceStateChangedRenderer(),
-    DeviceConnectedRenderer(),
-    DeviceDisconnectedRenderer(),
     AnalysisCompletedRenderer(),
-    SupplementAddedRenderer(),
     JournalEntryAddedRenderer(),
     JournalEntryEditedRenderer(),
     TimelineEntryCreatedRenderer(),

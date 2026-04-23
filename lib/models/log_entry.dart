@@ -46,6 +46,17 @@ class LogEntry {
 
   /// Optional local path to the captured audio file, if the entry came
   /// from a voice recording.
+  ///
+  /// **DEPRECATED (2026-04-22 cleanup)** — no production code path
+  /// currently writes this field; the voice-capture flow was deferred.
+  /// Kept in the Hive schema (HiveField 4) because removing it would
+  /// require a schema-version bump and would drop existing LogEntry
+  /// data on update. The Dart `@Deprecated` annotation is intentionally
+  /// omitted to avoid `deprecated_member_use_from_same_package`
+  /// warnings at the generated `.g.dart` adapter and the
+  /// `firestore_sync.dart` payload — those references are correct
+  /// (they preserve serialization symmetry) and not actionable.
+  /// Re-evaluate on the next schema migration.
   @HiveField(4)
   final String? rawAudioPath;
 
@@ -115,11 +126,25 @@ class LogEntry {
   final String? protocolIdAtTime;
 
   /// User-added tags.
+  ///
+  /// **DEPRECATED (2026-04-22 cleanup)** — no production code path
+  /// currently writes this field. Kept in the Hive schema
+  /// (HiveField 18) for backwards compatibility; removing it would
+  /// require a schema-version bump and drop existing data. See the
+  /// note on [rawAudioPath] for why the `@Deprecated` annotation is
+  /// intentionally omitted.
   @HiveField(18)
   final List<String>? tags;
 
   /// User annotations added after the fact. Kept separate from
   /// [rawText], which is immutable.
+  ///
+  /// **DEPRECATED (2026-04-22 cleanup)** — no production code path
+  /// currently writes this field. Kept in the Hive schema
+  /// (HiveField 19) for backwards compatibility; removing it would
+  /// require a schema-version bump and drop existing data. See the
+  /// note on [rawAudioPath] for why the `@Deprecated` annotation is
+  /// intentionally omitted.
   @HiveField(19)
   final String? userNotes;
 

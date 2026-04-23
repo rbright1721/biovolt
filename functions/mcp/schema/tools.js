@@ -24,7 +24,7 @@ const TOOLS = Object.freeze([
       "active protocols, fasting hours, HRV baseline, " +
       "and recent session summary. Use this first in " +
       "any health conversation.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {type: "object", properties: {}},
   }),
   Object.freeze({
     name: "get_session_history",
@@ -44,23 +44,34 @@ const TOOLS = Object.freeze([
   }),
   Object.freeze({
     name: "get_active_protocols",
-    description: "Get all active supplement and " +
-      "peptide protocols with cycle day, dose, " +
-      "route, and protocol notes/rationale.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Get the user's protocols (supplements, " +
+      "peptides) with cycle day, dose, route, and notes. " +
+      "By default returns only currently active protocols. " +
+      "Pass includeRetired: true to include " +
+      "historical/completed protocols (isActive=false).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        includeRetired: {
+          type: "boolean",
+          description: "Include retired protocols " +
+            "(isActive=false). Default false.",
+        },
+      },
+    },
   }),
   Object.freeze({
     name: "get_fasting_state",
     description: "Get current fasting status — " +
       "hours fasted, eating window, last meal time, " +
       "and fasting schedule type.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {type: "object", properties: {}},
   }),
   Object.freeze({
     name: "get_bloodwork",
     description: "Get the most recent bloodwork " +
       "panel with all biomarker values.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {type: "object", properties: {}},
   }),
   Object.freeze({
     name: "get_journal_context",
@@ -95,6 +106,70 @@ const TOOLS = Object.freeze([
       required: ["message"],
     },
   }),
+  Object.freeze({
+    name: "get_log_entries",
+    description: "Get the user's raw timeline log entries " +
+      "(doses, meals, symptoms, moods, training, notes, " +
+      "etc.). These are the user's verbatim observations, " +
+      "with classifier-extracted structured fields when " +
+      "available. Use to answer 'what have I logged' or " +
+      "to surface specific entry types in a window.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sinceDaysAgo: {
+          type: "number",
+          description: "How many days back to include " +
+            "(default 7, min 1, max 90)",
+        },
+        types: {
+          type: "array",
+          items: {type: "string"},
+          description: "Filter to these classifier types " +
+            "(e.g. ['dose','meal']). Pass 'unclassified' " +
+            "to match any entry the classifier hasn't " +
+            "finished. Omit to include all types.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum entries to return " +
+            "(default 100, capped at 200)",
+        },
+      },
+    },
+  }),
+  Object.freeze({
+    name: "get_protocol_timeline",
+    description: "Get a full timeline view of one " +
+      "protocol — the cycle window, every log entry " +
+      "tagged to it, an adherence summary (logged vs " +
+      "expected doses, plus contextual meal/symptom/" +
+      "mood/training counts in window), and optionally " +
+      "the sessions and bloodwork that overlapped the " +
+      "cycle. Use after get_active_protocols to dive " +
+      "into a specific protocol.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        protocolId: {
+          type: "string",
+          description: "The protocol document id (from " +
+            "get_active_protocols).",
+        },
+        includeSessions: {
+          type: "boolean",
+          description: "Include sessions overlapping the " +
+            "cycle window (default true).",
+        },
+        includeBloodwork: {
+          type: "boolean",
+          description: "Include bloodwork panels with " +
+            "before/during/after context (default true).",
+        },
+      },
+      required: ["protocolId"],
+    },
+  }),
 ]);
 
-module.exports = { SERVER_INFO, TOOLS };
+module.exports = {SERVER_INFO, TOOLS};

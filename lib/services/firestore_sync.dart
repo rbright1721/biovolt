@@ -15,8 +15,58 @@ class FirestoreSync {
   factory FirestoreSync() => _instance;
   FirestoreSync._();
 
-  final _db = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  // Lazy initializers — Firebase plugin singletons throw if accessed
+  // before Firebase.initializeApp(). Using `late final` defers that
+  // access until the first sync attempt, which lets unit tests that
+  // never sync (event_log_test calling endProtocol) construct the
+  // FirestoreSync singleton transitively without a Firebase test
+  // harness.
+  late final FirebaseFirestore _db = FirebaseFirestore.instance;
+  late final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // ── Operational visibility ─────────────────────────────
+  // Updated by every _set/_delete attempt so a Settings UI (or a
+  // future debug screen) can show whether sync is healthy. Three
+  // pieces of state:
+  //   _lastError / _lastErrorAt — most recent failure, cleared once
+  //     a successful op runs after the failure.
+  //   _lastSuccessfulSyncAt — last successful write time, used for
+  //     the "OK · last sync N ago" status line.
+  String? _lastError;
+  DateTime? _lastErrorAt;
+  DateTime? _lastSuccessfulSyncAt;
+
+  String? get lastError => _lastError;
+  DateTime? get lastErrorAt => _lastErrorAt;
+  DateTime? get lastSuccessfulSyncAt => _lastSuccessfulSyncAt;
+
+  /// Human-readable status for UI consumption.
+  String get statusDescription => formatSyncStatus(
+        lastError: _lastError,
+        lastErrorAt: _lastErrorAt,
+        lastSuccessfulSyncAt: _lastSuccessfulSyncAt,
+        now: DateTime.now(),
+      );
+
+  /// Test-only reset for the singleton state. The factory returns the
+  /// same instance across tests, so without this the state would leak
+  /// between cases.
+  @visibleForTesting
+  void resetSyncStatusForTest() {
+    _lastError = null;
+    _lastErrorAt = null;
+    _lastSuccessfulSyncAt = null;
+  }
+
+  @visibleForTesting
+  void recordSuccessForTest(DateTime at) {
+    _onSetSuccess(at);
+  }
+
+  @visibleForTesting
+  void recordErrorForTest(String error, DateTime at) {
+    _onSetError(error, at);
+  }
 
   // Returns null if not authenticated
   String? get _uid => _auth.currentUser?.uid;
@@ -33,8 +83,18 @@ class FirestoreSync {
   }
 
   // ── Sync guard ─────────────────────────────────────
-  // All sync operations are no-ops if not authenticated
-  bool get canSync => _uid != null;
+  // All sync operations are no-ops if not authenticated. Try/catch
+  // covers the test-environment case where FirebaseAuth.instance
+  // throws because Firebase wasn't initialized — treat that as
+  // "can't sync" and let the caller move on rather than crashing
+  // a test that just happened to touch StorageService.endProtocol.
+  bool get canSync {
+    try {
+      return _uid != null;
+    } catch (_) {
+      return false;
+    }
+  }
 
   // ── Full sync on login ─────────────────────────────
   // Call this after user signs in
@@ -112,9 +172,12 @@ class FirestoreSync {
         'protocols', protocol.id, buildActiveProtocolFirestorePayload(protocol));
   }
 
-  Future<void> deleteProtocol(String protocolId) async {
-    await _delete('protocols', protocolId);
-  }
+  // Removed in 2026-04-22 cleanup: deleteProtocol had a single
+  // historical caller (profile_screen.dart's END button) that was
+  // racing against endProtocol's writeProtocol and hard-deleting
+  // the doc. The race was removed in the prior session; this method
+  // had no remaining callers and is gone now. Retired protocols
+  // stay queryable in Firestore via writeProtocol(updated).
 
   Future<void> syncSessions(StorageService storage) async {
     if (!canSync) return;
@@ -404,9 +467,8 @@ class FirestoreSync {
     await _set('log_entries', entry.id, _logEntryPayload(entry));
   }
 
-  Future<void> deleteLogEntry(String id) async {
-    await _delete('log_entries', id);
-  }
+  // Removed in 2026-04-22 cleanup alongside StorageService.deleteLogEntry.
+  // No delete-entry UI path exists today.
 
   Map<String, dynamic> _logEntryPayload(LogEntry e) =>
       buildLogEntryFirestorePayload(e);
@@ -419,7 +481,9 @@ class FirestoreSync {
       await _collection(collection)
           ?.doc(docId)
           .set(data, SetOptions(merge: true));
+      _onSetSuccess(DateTime.now());
     } catch (e) {
+      _onSetError(e.toString(), DateTime.now());
       debugPrint('FirestoreSync._set error: $e');
     }
   }
@@ -428,10 +492,52 @@ class FirestoreSync {
     if (!canSync) return;
     try {
       await _collection(collection)?.doc(docId).delete();
+      _onSetSuccess(DateTime.now());
     } catch (e) {
+      _onSetError(e.toString(), DateTime.now());
       debugPrint('FirestoreSync._delete error: $e');
     }
   }
+
+  void _onSetSuccess(DateTime at) {
+    _lastSuccessfulSyncAt = at;
+    // Clear a stale error if the success postdates it. Keeps a fresh
+    // failure visible until the next round of writes succeeds.
+    if (_lastErrorAt != null && _lastErrorAt!.isBefore(at)) {
+      _lastError = null;
+      _lastErrorAt = null;
+    }
+  }
+
+  void _onSetError(String error, DateTime at) {
+    _lastError = error;
+    _lastErrorAt = at;
+  }
+}
+
+/// Pure formatter — exposed so the Settings UI and tests don't have
+/// to construct the singleton. Inputs are nullable to match the
+/// FirestoreSync getters' nullable types.
+String formatSyncStatus({
+  required String? lastError,
+  required DateTime? lastErrorAt,
+  required DateTime? lastSuccessfulSyncAt,
+  required DateTime now,
+}) {
+  if (lastError != null && lastErrorAt != null) {
+    final ago = now.difference(lastErrorAt);
+    return 'Error · $lastError (${_formatAgo(ago)} ago)';
+  }
+  if (lastSuccessfulSyncAt == null) return 'No sync yet';
+  final ago = now.difference(lastSuccessfulSyncAt);
+  return 'OK · last sync ${_formatAgo(ago)} ago';
+}
+
+String _formatAgo(Duration d) {
+  if (d.inSeconds < 60) return '${d.inSeconds}s';
+  if (d.inMinutes < 60) return '${d.inMinutes}m';
+  if (d.inHours < 24) return '${d.inHours}h';
+  return '${d.inDays}d';
 }
 
 /// Builds the Firestore document body for a [LogEntry].
@@ -474,8 +580,6 @@ Map<String, dynamic> buildLogEntryFirestorePayload(LogEntry e) => {
 /// (cycleLengthDays 0 or 365) is kept as a fallback for records that
 /// predate the schema bump and therefore have a null flag.
 Map<String, dynamic> buildActiveProtocolFirestorePayload(ActiveProtocol p) {
-  final isOngoing = p.isOngoingFlag ??
-      (p.cycleLengthDays == 0 || p.cycleLengthDays == 365);
   return <String, dynamic>{
     'id': p.id,
     'name': p.name,
@@ -487,10 +591,17 @@ Map<String, dynamic> buildActiveProtocolFirestorePayload(ActiveProtocol p) {
     'route': p.route,
     'notes': p.notes,
     'isActive': p.isActive,
-    // Derived / resolved fields — included so Firestore consumers
-    // (Cloud Functions, dashboards) don't need to re-derive.
-    'currentCycleDay': p.currentCycleDay,
-    'isOngoing': isOngoing,
+    // Stored bool flag — source of truth for "is ongoing" semantics.
+    // MCP tools read this directly and compute the derived `isOngoing`
+    // server-side (`isOngoingFlag ?? false`).
+    'isOngoingFlag': p.isOngoingFlag,
+    // Derived-from-time fields (currentCycleDay, plannedEndDate,
+    // isOnCycle, daysRemaining, and the previous `isOngoing`
+    // heuristic) are intentionally NOT written to Firestore. They
+    // compute from DateTime.now() against startDate/cycleLengthDays,
+    // so a cached Firestore snapshot silently drifts from reality
+    // between writes. MCP tools compute them fresh on every read via
+    // `_protocol_shape.js` using the stored source fields.
     // Extension fields added for the Part 2.5 classifier.
     'doseDisplay': p.doseDisplay,
     'frequency': p.frequency,

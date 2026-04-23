@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
@@ -6,6 +8,7 @@ import '../connectors/connector_oura.dart';
 import '../connectors/connector_registry.dart';
 import '../models/normalized_record.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_sync.dart';
 import '../services/oura_sync_service.dart';
 import '../services/storage_service.dart';
 import 'profile_screen.dart';
@@ -100,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
                   _buildAccountSection(),
                   const SizedBox(height: 24),
-                  _buildDeveloperSection(),
+                  _buildSyncSection(),
                   const SizedBox(height: 24),
                   _buildAboutSection(),
                   const SizedBox(height: 40),
@@ -650,62 +653,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 
   // ---------------------------------------------------------------------------
-  // Developer (temporary — Session 2 timeline preview entry)
+  // Sync (post-audit Fix #5)
   // ---------------------------------------------------------------------------
   //
-  // Removed in Session 3 once the TimelineScreen replaces the LIVE tab.
-  // Until then this gives a hand-rolled entry point to verify the screen
-  // visually without making it the default route.
+  // Single status line backed by [FirestoreSync.statusDescription].
+  // Intentionally minimal — no retry button, no error history. The
+  // intent is "user can see something is wrong without checking
+  // logcat" while the underlying retry/queue work is deferred.
 
-  Widget _buildDeveloperSection() {
+  Widget _buildSyncSection() {
     return _Section(
-      title: 'DEVELOPER',
+      title: 'SYNC',
       children: [
-        GestureDetector(
-          onTap: () =>
-              Navigator.of(context).pushNamed('/timeline-preview'),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: BioVoltColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: BioVoltColors.cardBorder),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.timeline_rounded,
-                    size: 18, color: BioVoltColors.amber),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'OPEN TIMELINE PREVIEW',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: BioVoltColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Session 2 dev route — static rendering only',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: BioVoltColors.textSecondary,
-                        ),
-                      ),
-                    ],
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: BioVoltColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: BioVoltColors.cardBorder),
+          ),
+          child: StreamBuilder<void>(
+            // Re-render every 10s so the relative-time portion of the
+            // status string ("3m ago" → "4m ago") stays fresh without
+            // a manual refresh.
+            stream: Stream<void>.periodic(const Duration(seconds: 10)),
+            builder: (context, _) {
+              final status = FirestoreSync().statusDescription;
+              final isError = FirestoreSync().lastError != null;
+              return Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: isError
+                          ? BioVoltColors.coral
+                          : BioVoltColors.teal,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: BioVoltColors.textSecondary.withAlpha(80),
-                  size: 20,
-                ),
-              ],
-            ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      status,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        color: BioVoltColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],

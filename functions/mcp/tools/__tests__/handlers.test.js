@@ -145,11 +145,19 @@ describe("get_session_history", () => {
 });
 
 describe("get_active_protocols", () => {
-  test("returns all protocol docs", async () => {
+  test("returns active protocol docs", async () => {
+    // After the post-audit follow-up, get_active_protocols filters
+    // by isActive=true by default. Fixtures must opt in explicitly.
     const userRef = fakeUserRef({
       protocols: [
-        { id: "p1", data: { name: "NAC", doseMcg: 600 } },
-        { id: "p2", data: { name: "BPC-157", doseMcg: 250 } },
+        {
+          id: "p1",
+          data: {name: "NAC", doseMcg: 600, isActive: true},
+        },
+        {
+          id: "p2",
+          data: {name: "BPC-157", doseMcg: 250, isActive: true},
+        },
       ],
     });
 

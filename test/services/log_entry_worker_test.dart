@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:biovolt/models/active_protocol.dart';
 import 'package:biovolt/models/log_entry.dart';
+import 'package:biovolt/models/user_profile.dart';
 import 'package:biovolt/services/context_inferrer.dart';
 import 'package:biovolt/services/firestore_sync.dart';
 import 'package:biovolt/services/log_entry_classifier.dart';
@@ -110,10 +111,19 @@ class _StubInferrer implements ContextInferrer {
 /// Firebase. Records calls for assertion.
 class _StubSync implements FirestoreSync {
   final List<String> writtenIds = [];
+  int profileSyncCount = 0;
 
   @override
   Future<void> writeLogEntry(LogEntry entry) async {
     writtenIds.add(entry.id);
+  }
+
+  // Fix #2 plumbing — the worker calls syncProfile after a meal
+  // classification updates lastMealTime. Returning a real Future
+  // (vs noSuchMethod's null) so unawaited(...) doesn't blow up.
+  @override
+  Future<void> syncProfile(StorageService storage) async {
+    profileSyncCount++;
   }
 
   @override
@@ -649,6 +659,116 @@ void main() {
       await worker.dispose();
 
       expect(() => worker.start(), throwsA(isA<StateError>()));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fix #2 — meal classification updates profile.lastMealTime with a
+  // monotonic-max rule (never rewind the fasting clock).
+  // ---------------------------------------------------------------------------
+
+  group('meal-classification → lastMealTime', () {
+    Future<void> seedProfile({DateTime? lastMealTime}) async {
+      await storage.saveUserProfile(UserProfile(
+        userId: 'test-user',
+        createdAt: DateTime.utc(2026, 1, 1),
+        healthGoals: const [],
+        knownConditions: const [],
+        baselineEstablished: false,
+        preferredUnits: 'imperial',
+        fastingType: '16:8',
+        eatWindowStartHour: 12,
+        eatWindowEndHour: 20,
+        lastMealTime: lastMealTime,
+      ));
+    }
+
+    test('meal result with no prior lastMealTime sets it to '
+        "entry.occurredAt", () async {
+      await seedProfile();
+      await seed(
+          id: 'meal-1', loggedAt: DateTime.utc(2026, 4, 22, 12, 15));
+      final sync = _StubSync();
+      final classifier = _FakeClassifier(
+          [_Response.ok(_stubResult('meal-1', type: 'meal'))]);
+      final worker = buildWorker(classifier: classifier, sync: sync);
+
+      await worker.processPending();
+      await _pumpEventLoop();
+
+      expect(storage.getUserProfile()!.lastMealTime,
+          DateTime.utc(2026, 4, 22, 12, 15));
+      expect(sync.profileSyncCount, greaterThanOrEqualTo(1));
+    });
+
+    test('meal result with newer occurredAt updates lastMealTime',
+        () async {
+      await seedProfile(lastMealTime: DateTime.utc(2026, 4, 18, 13));
+      await seed(
+          id: 'meal-2', loggedAt: DateTime.utc(2026, 4, 22, 12, 15));
+      final classifier = _FakeClassifier(
+          [_Response.ok(_stubResult('meal-2', type: 'meal'))]);
+      final worker = buildWorker(classifier: classifier);
+
+      await worker.processPending();
+      await _pumpEventLoop();
+
+      expect(storage.getUserProfile()!.lastMealTime,
+          DateTime.utc(2026, 4, 22, 12, 15));
+    });
+
+    test('meal result with older occurredAt does NOT rewind lastMealTime',
+        () async {
+      final newer = DateTime.utc(2026, 4, 22, 12, 0);
+      await seedProfile(lastMealTime: newer);
+      // Backdated meal entry — earlier than current lastMealTime.
+      await seed(
+          id: 'backdated',
+          loggedAt: DateTime.utc(2026, 4, 22, 8, 0));
+      final sync = _StubSync();
+      final classifier = _FakeClassifier(
+          [_Response.ok(_stubResult('backdated', type: 'meal'))]);
+      final worker = buildWorker(classifier: classifier, sync: sync);
+
+      await worker.processPending();
+      await _pumpEventLoop();
+
+      expect(storage.getUserProfile()!.lastMealTime, newer,
+          reason: 'monotonic-max rule must hold');
+      expect(sync.profileSyncCount, 0,
+          reason: 'no profile sync when lastMealTime is unchanged');
+    });
+
+    test('non-meal classifications do NOT touch lastMealTime',
+        () async {
+      final priorMeal = DateTime.utc(2026, 4, 18, 13);
+      await seedProfile(lastMealTime: priorMeal);
+      await seed(
+          id: 'dose-1', loggedAt: DateTime.utc(2026, 4, 22, 12, 15));
+      final classifier = _FakeClassifier(
+          [_Response.ok(_stubResult('dose-1', type: 'dose'))]);
+      final worker = buildWorker(classifier: classifier);
+
+      await worker.processPending();
+      await _pumpEventLoop();
+
+      expect(storage.getUserProfile()!.lastMealTime, priorMeal);
+    });
+
+    test('meal classification still fires writeLogEntry alongside '
+        'the profile sync', () async {
+      await seedProfile();
+      await seed(
+          id: 'meal-3', loggedAt: DateTime.utc(2026, 4, 22, 12, 15));
+      final sync = _StubSync();
+      final classifier = _FakeClassifier(
+          [_Response.ok(_stubResult('meal-3', type: 'meal'))]);
+      final worker = buildWorker(classifier: classifier, sync: sync);
+
+      await worker.processPending();
+      await _pumpEventLoop();
+
+      expect(sync.writtenIds, contains('meal-3'));
     });
   });
 }

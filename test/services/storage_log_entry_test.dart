@@ -455,23 +455,9 @@ void main() {
       expect(classified, isEmpty);
     });
 
-    // -- Delete ----------------------------------------------------------
-
-    test('deleteLogEntry removes the record and emits entry_deleted',
-        () async {
-      final entry = make('del-1',
-          occurredAt: DateTime(2026, 4, 20), type: 'meal');
-      await storage.saveLogEntry(entry);
-
-      await storage.deleteLogEntry('del-1');
-
-      expect(storage.getLogEntry('del-1'), isNull);
-      final deleted = await storage.eventLog
-          .query(type: EventTypes.entryDeleted);
-      expect(deleted.length, 1);
-      expect(deleted.first.payload['id'], 'del-1');
-      expect(deleted.first.payload['type'], 'meal');
-    });
+    // -- Delete: removed in 2026-04-22 cleanup alongside the
+    // StorageService.deleteLogEntry method itself; no UI flow
+    // exists. Add this test back when a delete-entry path lands.
   });
 
   // ---------------------------------------------------------------------
