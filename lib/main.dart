@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
 import 'firebase_options.dart';
+import 'connectors/connector_chest_strap.dart';
 import 'connectors/connector_esp32.dart';
 import 'connectors/connector_oura.dart';
-import 'connectors/connector_polar.dart';
 import 'connectors/connector_registry.dart';
 import 'screens/journal_screen.dart';
 import 'screens/pre_session_screen.dart';
@@ -66,10 +66,11 @@ void main() async {
   final registry = ConnectorRegistry.instance;
   registry.register(Esp32Connector(bleService: bleService));
 
-  // Register Polar H10 connector
-  final polarConnector = PolarConnector();
-  registry.register(polarConnector);
-  polarConnector.authenticate().catchError((_) {});
+  // Register generic BLE chest-strap connector (Polar H10, Coospo H9Z,
+  // or any device advertising HR Service 0x180D).
+  final chestStrapConnector = ChestStrapConnector();
+  registry.register(chestStrapConnector);
+  chestStrapConnector.authenticate().catchError((_) {});
 
   // Register Oura Ring connector
   final ouraConnector = OuraConnector();

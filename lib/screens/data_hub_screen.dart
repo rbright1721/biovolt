@@ -187,15 +187,6 @@ class _DataHubScreenState extends State<DataHubScreen> {
     final profile = _storage.getUserProfile();
     if (profile != null && profile.healthGoals.isNotEmpty) score += 10;
 
-    // Polar H10 → +10% (check if any connector has ECG data type)
-    final connectors = ConnectorRegistry.instance.getAll();
-    if (connectors.any((c) =>
-        c.supportedDataTypes.contains(DataType.ecg) &&
-        c.connectorId != 'esp32_biovolt' &&
-        c.status == ConnectorStatus.connected)) {
-      score += 10;
-    }
-
     return score.clamp(0, 100);
   }
 

@@ -502,20 +502,20 @@ void main() {
         status: ConnectorStatus.connected,
         isAuthenticated: true,
       );
-      final h10 = ConnectorState(
-        connectorId: 'polar_h10',
+      final strap = ConnectorState(
+        connectorId: 'chest_strap',
         status: ConnectorStatus.connected,
         isAuthenticated: true,
       );
       await storage.saveConnectorState(esp);
-      await storage.saveConnectorState(h10);
+      await storage.saveConnectorState(strap);
 
       final events = await storage.eventLog
           .query(type: EventTypes.deviceStateChanged);
       expect(events.length, 2);
       final ids =
           events.map((e) => e.payload['connectorId']).toSet();
-      expect(ids, {'esp32', 'polar_h10'});
+      expect(ids, {'esp32', 'chest_strap'});
     });
 
     test(

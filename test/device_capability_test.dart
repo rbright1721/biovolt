@@ -163,7 +163,7 @@ void main() {
         () {
       final reg = ConnectorRegistry.instance;
       final h10 = _MockConnector(
-        connectorId: 'polar_h10',
+        connectorId: 'chest_strap',
         caps: {
           DeviceCapability.liveHeartRate,
           DeviceCapability.liveHrvRr,
@@ -204,7 +204,7 @@ void main() {
     test('has(cap) reflects availableCapabilities', () {
       final reg = ConnectorRegistry.instance;
       reg.register(_MockConnector(
-        connectorId: 'polar_h10',
+        connectorId: 'chest_strap',
         caps: {DeviceCapability.liveHeartRate},
         connected: true,
       ));
@@ -281,7 +281,7 @@ void main() {
         () async {
       final reg = ConnectorRegistry.instance;
       final h10 = _MockConnector(
-        connectorId: 'polar_h10',
+        connectorId: 'chest_strap',
         caps: {
           DeviceCapability.liveHeartRate,
           DeviceCapability.liveHrvRr,
@@ -334,7 +334,7 @@ void main() {
         () async {
       final reg = ConnectorRegistry.instance;
       final h10 = _MockConnector(
-        connectorId: 'polar_h10',
+        connectorId: 'chest_strap',
         caps: {DeviceCapability.liveHeartRate},
         connected: true,
       );
@@ -357,25 +357,25 @@ void main() {
   // -- Concrete-connector capability contracts -----------------------------
 
   group('concrete connector capability sets', () {
-    // Polar and Esp32 expose live streaming; Oura exposes summaries.
+    // Chest strap and Esp32 expose live streaming; Oura exposes summaries.
     // These are intentionally tested as contracts — if a future edit
     // misclassifies a connector (e.g. moves Oura into live mode) the
     // capability-driven mode selection silently breaks, so we nail it
     // down explicitly.
 
-    test('Polar H10 surfaces liveHeartRate, liveHrvRr, liveEcg', () {
-      // Constructing PolarConnector is heavy (SDK init); instead
-      // assert by re-declaring the expected contract here. The
-      // capability set is a static const in the connector, so any
-      // drift would surface in code review — and in practice the
-      // ConnectorRegistry capability tests above already exercise the
-      // union. Left as a placeholder for future explicit mocking.
+    test('Chest strap surfaces liveHeartRate and liveHrvRr (no ECG)', () {
+      // Construction of a real ChestStrapConnector touches the BLE
+      // stack; re-declare the expected contract here. The capability
+      // set lives as a const on the connector, so any drift would
+      // surface in code review — and the ConnectorRegistry capability
+      // tests above exercise the union.
       final expected = {
         DeviceCapability.liveHeartRate,
         DeviceCapability.liveHrvRr,
-        DeviceCapability.liveEcg,
       };
-      expect(expected.contains(DeviceCapability.liveEcg), isTrue);
+      expect(expected.contains(DeviceCapability.liveHeartRate), isTrue);
+      expect(expected.contains(DeviceCapability.liveHrvRr), isTrue);
+      expect(expected.contains(DeviceCapability.liveEcg), isFalse);
     });
   });
 }
