@@ -117,16 +117,20 @@ class ConnectorRegistry {
   // Merged live stream
   // ---------------------------------------------------------------------------
 
-  /// A single stream that merges live output from ALL connectors whose
-  /// [liveStream] is non-null, using [StreamGroup.merge].
+  /// A broadcast stream that merges live output from ALL connectors whose
+  /// [liveStream] is non-null. Broadcast because multiple consumers
+  /// (SensorsBloc for live UI, SessionRecorder for active sessions,
+  /// potentially others) need to listen concurrently — the earlier
+  /// single-subscription variant crashed with "Bad state: Stream has
+  /// already been listened to" the moment a second consumer attached.
   Stream<NormalizedRecord> get mergedLiveStream {
     final streams = _connectors.values
         .map((c) => c.liveStream)
         .whereType<Stream<NormalizedRecord>>()
         .toList();
 
-    if (streams.isEmpty) return const Stream.empty();
-    return StreamGroup.merge(streams);
+    if (streams.isEmpty) return const Stream<NormalizedRecord>.empty();
+    return StreamGroup.mergeBroadcast(streams);
   }
 
   // ---------------------------------------------------------------------------

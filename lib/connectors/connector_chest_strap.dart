@@ -10,6 +10,7 @@ import '../models/device_capability.dart';
 import '../models/normalized_record.dart';
 import 'chest_strap_known_devices.dart';
 import 'connector_base.dart';
+import 'connector_registry.dart';
 
 /// Generic BLE chest-strap connector.
 ///
@@ -169,6 +170,10 @@ class ChestStrapConnector implements BioVoltConnector {
           _connected = false;
           _status = ConnectorStatus.disconnected;
         }
+        // Let the registry (and anything listening to its capability
+        // stream — e.g. SensorsBloc) know this connector's liveStream
+        // just flipped between null and non-null.
+        ConnectorRegistry.instance.notifyStateChanged();
       });
 
       await device.connect(autoConnect: false);
@@ -238,13 +243,25 @@ class ChestStrapConnector implements BioVoltConnector {
           final parsed = parseHrMeasurement(bytes);
           if (parsed == null) return;
 
+          final now = DateTime.now();
           controller.add(HeartRateReading(
             bpm: parsed.bpm.toDouble(),
             source: DataSource.ppg50hz,
             quality: DataQuality.research,
             connectorId: connectorId,
-            timestamp: DateTime.now(),
+            timestamp: now,
           ));
+          if (parsed.rrIntervalsMs.isNotEmpty) {
+            // Emit raw RR intervals as their own record so the session
+            // recorder can persist the per-beat values — the chest
+            // strap's differentiator over ring-based summary devices.
+            controller.add(RrIntervalSample(
+              rrIntervalsMs: List<int>.unmodifiable(parsed.rrIntervalsMs),
+              connectorId: connectorId,
+              timestamp: now,
+              quality: DataQuality.research,
+            ));
+          }
           rrBuffer.addAll(parsed.rrIntervalsMs);
         }));
       } catch (e) {

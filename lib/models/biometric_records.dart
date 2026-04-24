@@ -316,6 +316,35 @@ class TemperatureReading extends NormalizedRecord {
 }
 
 // ---------------------------------------------------------------------------
+// RrIntervalSample
+// ---------------------------------------------------------------------------
+
+/// A batch of raw R-R intervals (ms) emitted per chest-strap notification.
+///
+/// Intentionally not Hive-persisted — the session recorder flattens these
+/// into [PolarMetrics.rrIntervalsMs] when the session finalizes. Keeping
+/// the in-flight record lightweight avoids a schema bump and keeps the
+/// Hive type-adapter table stable.
+class RrIntervalSample extends NormalizedRecord {
+  final List<int> rrIntervalsMs;
+
+  RrIntervalSample({
+    required this.rrIntervalsMs,
+    required super.connectorId,
+    required super.timestamp,
+    required super.quality,
+  });
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'rrIntervalsMs': rrIntervalsMs,
+        'connectorId': connectorId,
+        'timestamp': timestamp.toIso8601String(),
+        'quality': quality.name,
+      };
+}
+
+// ---------------------------------------------------------------------------
 // ECGRecord
 // ---------------------------------------------------------------------------
 

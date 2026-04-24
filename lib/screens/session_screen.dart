@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../bloc/sensors/sensors_bloc.dart';
+import '../bloc/sensors/sensors_state.dart';
 import '../bloc/session/session_bloc.dart';
 import '../bloc/session/session_event.dart';
 import '../bloc/session/session_state.dart';
@@ -90,7 +92,7 @@ class SessionScreen extends StatelessWidget {
                           _CoachMessageBanner(message: state.coachMessage!),
                         ],
                         const SizedBox(height: 24),
-                        _buildFocusCards(state),
+                        _buildFocusCards(context, state),
                         const SizedBox(height: 100),
                       ],
                     ),
@@ -418,12 +420,19 @@ class SessionScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFocusCards(SessionState state) {
+  Widget _buildFocusCards(BuildContext context, SessionState state) {
     final type = state.selectedType!;
+
+    // HR/HRV go through SensorsBloc so chest-strap data reaches the
+    // session UI. GSR/Temp/Coherence stay on BleService — the ESP32
+    // pod is the only source for those signals.
+    final sensorsBloc = context.read<SensorsBloc>();
+    Stream<double> blocStream(double Function(SensorsState) sel) =>
+        sensorsBloc.stream.map(sel).distinct();
 
     final cards = switch (type) {
       SessionType.breathwork => [
-          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', blocStream((s) => s.hrv),
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
           _focusCard('GSR', '\u00B5S', bleService.gsrStream,
               BioVoltColors.amber, (v) => v.toStringAsFixed(2)),
@@ -431,7 +440,7 @@ class SessionScreen extends StatelessWidget {
       SessionType.coldExposure => [
           _focusCard('Temperature', '\u00B0F', bleService.temperatureStream,
               BioVoltColors.coral, (v) => v.toStringAsFixed(1)),
-          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', blocStream((s) => s.hrv),
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
         ],
       SessionType.meditation => [
@@ -441,9 +450,9 @@ class SessionScreen extends StatelessWidget {
               BioVoltColors.teal, (v) => v.toStringAsFixed(0)),
         ],
       SessionType.fastingCheck => [
-          _focusCard('Heart Rate', 'BPM', bleService.heartRateStream,
+          _focusCard('Heart Rate', 'BPM', blocStream((s) => s.heartRate),
               BioVoltColors.teal, (v) => v.toStringAsFixed(0)),
-          _focusCard('HRV RMSSD', 'ms', bleService.hrvStream,
+          _focusCard('HRV RMSSD', 'ms', blocStream((s) => s.hrv),
               BioVoltColors.teal, (v) => v.toStringAsFixed(1)),
         ],
       SessionType.grounding => [

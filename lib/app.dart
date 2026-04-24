@@ -10,6 +10,7 @@ import 'bloc/session/session_bloc.dart';
 import 'bloc/session/session_event.dart';
 import 'bloc/session/session_state.dart';
 import 'config/theme.dart';
+import 'connectors/connector_registry.dart';
 import 'screens/analysis_screen.dart';
 import 'main.dart' show appNavigatorKey;
 import 'screens/data_hub_screen.dart';
@@ -114,7 +115,10 @@ class _BioVoltAppState extends State<BioVoltApp>
       providers: [
         BlocProvider(
           create: (_) {
-            final bloc = SensorsBloc(bleService: widget.bleService);
+            final bloc = SensorsBloc(
+              bleService: widget.bleService,
+              connectorRegistry: ConnectorRegistry.instance,
+            );
             bloc.add(SensorsStarted());
             return bloc;
           },

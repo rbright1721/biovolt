@@ -77,7 +77,9 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(npx eslint *)",
       "Bash(grep -n \"^  group\\\\|^  }\\);$\" test/services/log_entry_worker_test.dart)",
-      "Bash(grep -qE \"issues found|No issues found|error\" \"C:\\\\\\\\Users\\\\\\\\jbrig\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\C--Users-jbrig-StudioProjects-biovolt\\\\\\\\628a53b1-12ba-4fa9-84fe-268f08759a3e\\\\\\\\tasks\\\\\\\\bn6764zrk.output\")"
+      "Bash(grep -qE \"issues found|No issues found|error\" \"C:\\\\\\\\Users\\\\\\\\jbrig\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\C--Users-jbrig-StudioProjects-biovolt\\\\\\\\628a53b1-12ba-4fa9-84fe-268f08759a3e\\\\\\\\tasks\\\\\\\\bn6764zrk.output\")",
+      "Bash(./gradlew --stop)",
+      "PowerShell(Get-CimInstance *)"
     ]
   }
 }

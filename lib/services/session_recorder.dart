@@ -229,6 +229,7 @@ class SessionRecorder {
         DateTime.now().difference(base.createdAt).inSeconds;
     final computed = _buildComputedMetrics(_fullSessionRecords);
     final esp32 = _buildEsp32Metrics(_fullSessionRecords);
+    final chestStrap = _buildChestStrapMetrics(_fullSessionRecords);
 
     final finalSession = Session(
       sessionId: base.sessionId,
@@ -240,6 +241,7 @@ class SessionRecorder {
       context: base.context,
       biometrics: SessionBiometrics(
         esp32: esp32,
+        polarH10: chestStrap,
         computed: computed,
       ),
       interventions: base.interventions,
@@ -329,6 +331,7 @@ class SessionRecorder {
         DateTime.now().difference(session.createdAt).inSeconds;
     final computed = _buildComputedMetrics(_fullSessionRecords);
     final esp32 = _buildEsp32Metrics(_fullSessionRecords);
+    final chestStrap = _buildChestStrapMetrics(_fullSessionRecords);
 
     final updated = Session(
       sessionId: session.sessionId,
@@ -338,7 +341,11 @@ class SessionRecorder {
       durationSeconds: durationSeconds,
       dataSources: session.dataSources,
       context: session.context,
-      biometrics: SessionBiometrics(esp32: esp32, computed: computed),
+      biometrics: SessionBiometrics(
+        esp32: esp32,
+        polarH10: chestStrap,
+        computed: computed,
+      ),
       interventions: session.interventions,
     );
 
@@ -443,6 +450,43 @@ class SessionRecorder {
       hrvRmssdMs: hrvReadings.isNotEmpty
           ? hrvReadings.reduce((a, b) => a + b) / hrvReadings.length
           : null,
+    );
+  }
+
+  /// Flatten every [RrIntervalSample] received during the session into a
+  /// single [PolarMetrics] bundle, restricted to chest-strap-origin
+  /// records so ESP32 pseudo-RRs never leak in here.
+  @visibleForTesting
+  static PolarMetrics? buildChestStrapMetrics(List<NormalizedRecord> records) =>
+      _buildChestStrapMetrics(records);
+
+  static PolarMetrics? _buildChestStrapMetrics(List<NormalizedRecord> records) {
+    final chestStrapRrs = records
+        .whereType<RrIntervalSample>()
+        .where((r) => r.connectorId == 'chest_strap')
+        .expand((r) => r.rrIntervalsMs)
+        .toList();
+    if (chestStrapRrs.isEmpty) return null;
+
+    final chestStrapHr = records
+        .whereType<HeartRateReading>()
+        .where((r) => r.connectorId == 'chest_strap')
+        .map((r) => r.bpm)
+        .toList();
+    final chestStrapHrv = records
+        .whereType<HRVReading>()
+        .where((r) => r.connectorId == 'chest_strap')
+        .toList();
+
+    double? avg(List<double> vals) =>
+        vals.isEmpty ? null : vals.reduce((a, b) => a + b) / vals.length;
+
+    return PolarMetrics(
+      heartRateBpm: avg(chestStrapHr),
+      hrvRmssdMs: avg(chestStrapHrv.map((r) => r.rmssdMs).toList()),
+      hrvSdnnMs: avg(
+          chestStrapHrv.map((r) => r.sdnnMs).whereType<double>().toList()),
+      rrIntervalsMs: chestStrapRrs,
     );
   }
 
